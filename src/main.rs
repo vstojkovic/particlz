@@ -7,10 +7,12 @@ use bevy::prelude::*;
 use bevy::window::{Window, WindowPlugin};
 use bevy::DefaultPlugins;
 use board::{Board, BoardResource};
+use border::{Border, BorderAssets};
 use strum_macros::EnumIter;
 use tile::{Tile, TileAssets, TileKind};
 
 mod board;
+mod border;
 mod tile;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter)]
@@ -24,6 +26,7 @@ pub enum Tint {
 #[derive(Resource)]
 pub struct Assets {
     tiles: TileAssets,
+    borders: BorderAssets,
 }
 
 fn main() {
@@ -36,6 +39,12 @@ fn main() {
     board.set_tile(1, 3, Tile::new(TileKind::Collector, Tint::Green));
     board.set_tile(1, 2, Tile::new(TileKind::Collector, Tint::Yellow));
     board.set_tile(1, 1, Tile::new(TileKind::Collector, Tint::Red));
+    board.set_horz_border(0, 0, Border::Wall);
+    board.set_horz_border(1, 0, Border::Wall);
+    board.set_horz_border(1, 4, Border::Window);
+    board.set_horz_border(2, 4, Border::Window);
+    board.set_vert_border(0, 0, Border::Window);
+    board.set_vert_border(1, 5, Border::Wall);
 
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -63,6 +72,7 @@ impl Assets {
     pub fn load(server: &AssetServer) -> Self {
         Self {
             tiles: TileAssets::load(server),
+            borders: BorderAssets::load(server),
         }
     }
 }

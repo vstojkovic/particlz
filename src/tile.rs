@@ -80,5 +80,5 @@ impl TileBundle {
     }
 }
 
-const TILE_WIDTH: f32 = 45.0;
-const TILE_HEIGHT: f32 = 45.0;
+pub const TILE_WIDTH: f32 = 45.0;
+pub const TILE_HEIGHT: f32 = 45.0;
