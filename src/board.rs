@@ -5,6 +5,8 @@ use bevy::hierarchy::BuildChildren;
 use bevy::prelude::SpatialBundle;
 
 use crate::border::{Border, BorderBundle, Orientation};
+use crate::manipulator::{Manipulator, ManipulatorBundle};
+use crate::particle::{Particle, ParticleBundle};
 use crate::tile::{Tile, TileBundle};
 use crate::Assets;
 
@@ -14,6 +16,12 @@ pub struct Board {
     tiles: Vec<Option<Tile>>,
     horz_borders: Vec<Option<Border>>,
     vert_borders: Vec<Option<Border>>,
+    pieces: Vec<Option<Piece>>,
+}
+
+pub enum Piece {
+    Particle(Particle),
+    Manipulator(Manipulator),
 }
 
 #[derive(Resource)]
@@ -23,6 +31,7 @@ pub struct BoardResource {
     tiles: Vec<Option<Entity>>,
     horz_borders: Vec<Option<Entity>>,
     vert_borders: Vec<Option<Entity>>,
+    pieces: Vec<Option<Entity>>,
 }
 
 #[derive(Bundle, Default)]
@@ -44,12 +53,17 @@ impl Board {
         let mut vert_borders = Vec::with_capacity(num_vert_borders);
         vert_borders.resize_with(num_vert_borders, || None);
 
+        let num_pieces = num_tiles;
+        let mut pieces = Vec::with_capacity(num_pieces);
+        pieces.resize_with(num_pieces, || None);
+
         Self {
             rows,
             cols,
             tiles,
             horz_borders,
             vert_borders,
+            pieces,
         }
     }
 
@@ -76,19 +90,29 @@ impl Board {
     pub fn set_vert_border<B: Into<Option<Border>>>(&mut self, row: usize, col: usize, border: B) {
         self.vert_borders[row * (self.cols + 1) + col] = border.into();
     }
+
+    pub fn get_piece(&self, row: usize, col: usize) -> Option<&Piece> {
+        self.pieces[row * self.cols + col].as_ref()
+    }
+
+    pub fn set_piece<T: Into<Option<Piece>>>(&mut self, row: usize, col: usize, piece: T) {
+        self.pieces[row * self.cols + col] = piece.into();
+    }
 }
 
 impl BoardResource {
     pub fn new(board: Board) -> Self {
-        let tiles = Vec::with_capacity(board.rows * board.cols);
-        let horz_borders = Vec::with_capacity((board.rows + 1) * board.cols);
-        let vert_borders = Vec::with_capacity(board.rows * (board.cols + 1));
+        let tiles = Vec::with_capacity(board.tiles.len());
+        let horz_borders = Vec::with_capacity(board.horz_borders.len());
+        let vert_borders = Vec::with_capacity(board.vert_borders.len());
+        let pieces = Vec::with_capacity(board.pieces.len());
         Self {
             board,
             parent: Entity::PLACEHOLDER,
             tiles,
             horz_borders,
             vert_borders,
+            pieces,
         }
     }
 
@@ -139,6 +163,43 @@ impl BoardResource {
                         }));
                 }
             }
+
+            for row in 0..self.board.rows {
+                for col in 0..self.board.cols {
+                    self.pieces
+                        .push(self.board.get_piece(row, col).map(|piece| {
+                            match piece {
+                                Piece::Particle(particle) => parent.spawn(ParticleBundle::new(
+                                    particle,
+                                    row,
+                                    col,
+                                    &assets.particles,
+                                )),
+                                Piece::Manipulator(manipulator) => {
+                                    parent.spawn(ManipulatorBundle::new(
+                                        manipulator,
+                                        row,
+                                        col,
+                                        &assets.manipulators,
+                                    ))
+                                }
+                            }
+                            .id()
+                        }));
+                }
+            }
         });
+    }
+}
+
+impl Into<Option<Piece>> for Particle {
+    fn into(self) -> Option<Piece> {
+        Some(Piece::Particle(self))
+    }
+}
+
+impl Into<Option<Piece>> for Manipulator {
+    fn into(self) -> Option<Piece> {
+        Some(Piece::Manipulator(self))
     }
 }
