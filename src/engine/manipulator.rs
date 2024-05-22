@@ -7,27 +7,10 @@ use bevy::render::texture::Image;
 use bevy::sprite::SpriteBundle;
 use bevy::transform::components::Transform;
 use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
 
-use crate::tile::{TILE_HEIGHT, TILE_WIDTH};
+use crate::model::{Emitters, Manipulator};
 
-pub struct Manipulator {
-    emitters: Emitters,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter)]
-pub enum Emitters {
-    Left,
-    Right,
-    Up,
-    Down,
-    LeftUp,
-    LeftDown,
-    RightUp,
-    RightDown,
-    LeftRight,
-    UpDown,
-}
+use super::{TILE_HEIGHT, TILE_WIDTH};
 
 pub struct ManipulatorAssets {
     textures: HashMap<Emitters, Handle<Image>>,
@@ -36,12 +19,6 @@ pub struct ManipulatorAssets {
 #[derive(Bundle)]
 pub struct ManipulatorBundle {
     sprite: SpriteBundle,
-}
-
-impl Manipulator {
-    pub fn new(emitters: Emitters) -> Self {
-        Self { emitters }
-    }
 }
 
 impl ManipulatorAssets {

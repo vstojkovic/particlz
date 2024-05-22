@@ -7,21 +7,10 @@ use bevy::render::texture::Image;
 use bevy::sprite::SpriteBundle;
 use bevy::transform::components::Transform;
 use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
 
-use crate::tile::{TILE_HEIGHT, TILE_WIDTH};
+use crate::model::Border;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter)]
-pub enum Border {
-    Wall,
-    Window,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum Orientation {
-    Horizontal,
-    Vertical,
-}
+use super::{TILE_HEIGHT, TILE_WIDTH};
 
 pub struct BorderAssets {
     textures: HashMap<Border, Handle<Image>>,
@@ -30,6 +19,12 @@ pub struct BorderAssets {
 #[derive(Bundle)]
 pub struct BorderBundle {
     sprite: SpriteBundle,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Orientation {
+    Horizontal,
+    Vertical,
 }
 
 impl Orientation {
@@ -91,5 +86,5 @@ impl BorderBundle {
     }
 }
 
-pub const BORDER_OFFSET_X: f32 = 22.0;
-pub const BORDER_OFFSET_Y: f32 = 22.0;
+const BORDER_OFFSET_X: f32 = 22.0;
+const BORDER_OFFSET_Y: f32 = 22.0;

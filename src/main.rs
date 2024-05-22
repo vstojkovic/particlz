@@ -2,38 +2,17 @@ use bevy::app::{App, Startup};
 use bevy::asset::AssetServer;
 use bevy::core_pipeline::core_2d::Camera2dBundle;
 use bevy::ecs::schedule::IntoSystemConfigs;
-use bevy::ecs::system::{Commands, Res, ResMut, Resource};
+use bevy::ecs::system::{Commands, Res, ResMut};
 use bevy::prelude::*;
 use bevy::window::{Window, WindowPlugin};
 use bevy::DefaultPlugins;
-use board::{Board, BoardResource};
-use border::{Border, BorderAssets};
-use manipulator::{Emitters, Manipulator, ManipulatorAssets};
-use particle::{Particle, ParticleAssets};
-use strum_macros::EnumIter;
-use tile::{Tile, TileAssets, TileKind};
 
-mod board;
-mod border;
-mod manipulator;
-mod particle;
-mod tile;
+mod engine;
+mod model;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter)]
-pub enum Tint {
-    White,
-    Green,
-    Yellow,
-    Red,
-}
-
-#[derive(Resource)]
-pub struct Assets {
-    tiles: TileAssets,
-    borders: BorderAssets,
-    particles: ParticleAssets,
-    manipulators: ManipulatorAssets,
-}
+use self::engine::board::BoardResource;
+use self::engine::Assets;
+use self::model::{Board, Border, Emitters, Manipulator, Particle, Tile, TileKind, Tint};
 
 fn main() {
     let board = make_test_board();
@@ -57,17 +36,6 @@ fn load_assets(mut commands: Commands, server: Res<AssetServer>) {
 fn setup_board(mut commands: Commands, mut board: ResMut<BoardResource>, assets: Res<Assets>) {
     commands.spawn(Camera2dBundle::default());
     board.spawn(&mut commands, &assets);
-}
-
-impl Assets {
-    pub fn load(server: &AssetServer) -> Self {
-        Self {
-            tiles: TileAssets::load(server),
-            borders: BorderAssets::load(server),
-            particles: ParticleAssets::load(server),
-            manipulators: ManipulatorAssets::load(server),
-        }
-    }
 }
 
 fn make_test_board() -> Board {

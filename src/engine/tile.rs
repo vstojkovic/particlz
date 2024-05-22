@@ -7,20 +7,10 @@ use bevy::render::texture::Image;
 use bevy::sprite::SpriteBundle;
 use bevy::transform::components::Transform;
 use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
 
-use crate::Tint;
+use crate::model::{Tile, TileKind, Tint};
 
-pub struct Tile {
-    pub kind: TileKind,
-    pub tint: Tint,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter)]
-pub enum TileKind {
-    Platform,
-    Collector,
-}
+use super::{TILE_HEIGHT, TILE_WIDTH};
 
 pub struct TileAssets {
     textures: HashMap<(TileKind, Tint), Handle<Image>>,
@@ -29,12 +19,6 @@ pub struct TileAssets {
 #[derive(Bundle)]
 pub struct TileBundle {
     sprite: SpriteBundle,
-}
-
-impl Tile {
-    pub fn new(kind: TileKind, tint: Tint) -> Self {
-        Self { kind, tint }
-    }
 }
 
 impl TileAssets {
@@ -79,6 +63,3 @@ impl TileBundle {
         }
     }
 }
-
-pub const TILE_WIDTH: f32 = 45.0;
-pub const TILE_HEIGHT: f32 = 45.0;

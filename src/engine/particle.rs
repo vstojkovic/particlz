@@ -1,18 +1,16 @@
+use std::collections::HashMap;
+
 use bevy::asset::{AssetServer, Handle};
 use bevy::ecs::bundle::Bundle;
 use bevy::math::Vec3;
 use bevy::render::texture::Image;
 use bevy::sprite::SpriteBundle;
 use bevy::transform::components::Transform;
-use bevy::utils::HashMap;
 use strum::IntoEnumIterator;
 
-use crate::tile::{TILE_HEIGHT, TILE_WIDTH};
-use crate::Tint;
+use crate::model::{Particle, Tint};
 
-pub struct Particle {
-    pub tint: Tint,
-}
+use super::{TILE_HEIGHT, TILE_WIDTH};
 
 pub struct ParticleAssets {
     textures: HashMap<Tint, Handle<Image>>,
@@ -21,13 +19,6 @@ pub struct ParticleAssets {
 #[derive(Bundle)]
 pub struct ParticleBundle {
     sprite: SpriteBundle,
-}
-
-impl Particle {
-    pub fn new(tint: Tint) -> Self {
-        assert!(tint != Tint::White);
-        Self { tint }
-    }
 }
 
 impl ParticleAssets {
