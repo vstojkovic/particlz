@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use bevy::asset::{AssetServer, Handle};
 use bevy::ecs::bundle::Bundle;
-use bevy::math::Vec3;
 use bevy::render::texture::Image;
 use bevy::sprite::SpriteBundle;
 use bevy::transform::components::Transform;
@@ -10,7 +9,7 @@ use strum::IntoEnumIterator;
 
 use crate::model::{Tile, TileKind, Tint};
 
-use super::{TILE_HEIGHT, TILE_WIDTH};
+use super::BoardCoords;
 
 pub struct TileAssets {
     textures: HashMap<(TileKind, Tint), Handle<Image>>,
@@ -18,6 +17,7 @@ pub struct TileAssets {
 
 #[derive(Bundle)]
 pub struct TileBundle {
+    coords: BoardCoords,
     sprite: SpriteBundle,
 }
 
@@ -47,15 +47,14 @@ impl TileAssets {
 }
 
 impl TileBundle {
-    pub fn new(tile: &Tile, row: usize, col: usize, assets: &TileAssets) -> Self {
+    pub fn new(tile: &Tile, coords: BoardCoords, assets: &TileAssets) -> Self {
         let texture = assets.textures[&(tile.kind, tile.tint)].clone();
-        let x = TILE_WIDTH * col as f32;
-        let y = TILE_HEIGHT * row as f32;
         Self {
+            coords,
             sprite: SpriteBundle {
                 texture,
                 transform: Transform {
-                    translation: Vec3::new(x, -y, 0.0),
+                    translation: coords.to_xy().extend(0.0),
                     ..Default::default()
                 },
                 ..Default::default()

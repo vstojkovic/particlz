@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use bevy::asset::{AssetServer, Handle};
 use bevy::ecs::bundle::Bundle;
-use bevy::math::{Quat, Vec3};
+use bevy::math::{Quat, Vec2};
 use bevy::render::texture::Image;
 use bevy::sprite::SpriteBundle;
 use bevy::transform::components::Transform;
@@ -10,7 +10,7 @@ use strum::IntoEnumIterator;
 
 use crate::model::Border;
 
-use super::{TILE_HEIGHT, TILE_WIDTH};
+use super::BoardCoords;
 
 pub struct BorderAssets {
     textures: HashMap<Border, Handle<Image>>,
@@ -18,6 +18,7 @@ pub struct BorderAssets {
 
 #[derive(Bundle)]
 pub struct BorderBundle {
+    coords: BoardCoords,
     sprite: SpriteBundle,
 }
 
@@ -28,17 +29,17 @@ pub enum Orientation {
 }
 
 impl Orientation {
-    fn offset_x(self) -> f32 {
+    fn offset(self) -> Vec2 {
         match self {
-            Self::Horizontal => 0.0,
-            Self::Vertical => BORDER_OFFSET_X,
+            Self::Horizontal => Vec2::new(0.0, -BORDER_OFFSET_Y),
+            Self::Vertical => Vec2::new(BORDER_OFFSET_X, 0.0),
         }
     }
 
-    fn offset_y(self) -> f32 {
+    fn rotation(self) -> Quat {
         match self {
-            Self::Horizontal => BORDER_OFFSET_Y,
-            Self::Vertical => 0.0,
+            Orientation::Horizontal => Quat::from_rotation_z(f32::to_radians(90.0)),
+            Orientation::Vertical => Quat::IDENTITY,
         }
     }
 }
@@ -60,24 +61,18 @@ impl BorderAssets {
 impl BorderBundle {
     pub fn new(
         border: &Border,
-        row: usize,
-        col: usize,
+        coords: BoardCoords,
         orientation: Orientation,
         assets: &BorderAssets,
     ) -> Self {
         let texture = assets.textures[border].clone();
-        let x = TILE_WIDTH * col as f32 - orientation.offset_x();
-        let y = TILE_HEIGHT * row as f32 - orientation.offset_y();
-        let rotation = match orientation {
-            Orientation::Horizontal => Quat::from_rotation_z(f32::to_radians(90.0)),
-            Orientation::Vertical => Quat::IDENTITY,
-        };
         Self {
+            coords,
             sprite: SpriteBundle {
                 texture,
                 transform: Transform {
-                    translation: Vec3::new(x, -y, 2.0),
-                    rotation,
+                    translation: (coords.to_xy() - orientation.offset()).extend(2.0),
+                    rotation: orientation.rotation(),
                     ..Default::default()
                 },
                 ..Default::default()

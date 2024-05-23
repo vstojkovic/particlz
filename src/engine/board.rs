@@ -1,20 +1,23 @@
 use bevy::ecs::bundle::Bundle;
 use bevy::ecs::entity::Entity;
-use bevy::ecs::system::{Commands, Resource};
+use bevy::ecs::system::{Commands, Query, Resource};
 use bevy::hierarchy::BuildChildren;
+use bevy::math::Vec2;
 use bevy::prelude::SpatialBundle;
+use bevy::transform::components::Transform;
 
 use crate::model::{Board, Piece};
 
 use super::border::{BorderBundle, Orientation};
+use super::focus::Focus;
 use super::manipulator::ManipulatorBundle;
 use super::particle::ParticleBundle;
 use super::tile::TileBundle;
-use super::Assets;
+use super::{Assets, BoardCoords};
 
 #[derive(Resource)]
 pub struct BoardResource {
-    board: Board,
+    pub board: Board,
     parent: Entity,
     tiles: Vec<Option<Entity>>,
     horz_borders: Vec<Option<Entity>>,
@@ -51,7 +54,7 @@ impl BoardResource {
                 for col in 0..self.board.cols {
                     self.tiles.push(self.board.get_tile(row, col).map(|tile| {
                         parent
-                            .spawn(TileBundle::new(tile, row, col, &assets.tiles))
+                            .spawn(TileBundle::new(tile, (row, col).into(), &assets.tiles))
                             .id()
                     }));
                 }
@@ -64,8 +67,7 @@ impl BoardResource {
                             parent
                                 .spawn(BorderBundle::new(
                                     border,
-                                    row,
-                                    col,
+                                    (row, col).into(),
                                     Orientation::Horizontal,
                                     &assets.borders,
                                 ))
@@ -81,8 +83,7 @@ impl BoardResource {
                             parent
                                 .spawn(BorderBundle::new(
                                     border,
-                                    row,
-                                    col,
+                                    (row, col).into(),
                                     Orientation::Vertical,
                                     &assets.borders,
                                 ))
@@ -98,15 +99,13 @@ impl BoardResource {
                             match piece {
                                 Piece::Particle(particle) => parent.spawn(ParticleBundle::new(
                                     particle,
-                                    row,
-                                    col,
+                                    (row, col).into(),
                                     &assets.particles,
                                 )),
                                 Piece::Manipulator(manipulator) => {
                                     parent.spawn(ManipulatorBundle::new(
                                         manipulator,
-                                        row,
-                                        col,
+                                        (row, col).into(),
                                         &assets.manipulators,
                                     ))
                                 }
@@ -115,6 +114,25 @@ impl BoardResource {
                         }));
                 }
             }
+
+            Focus::spawn(parent, &assets.focus);
         });
+    }
+
+    pub fn coords_at_pos(
+        &self,
+        pos: Vec2,
+        q_xform: &Query<&Transform>,
+    ) -> Option<(BoardCoords, Vec2)> {
+        let xform = q_xform.get(self.parent).unwrap();
+        let origin = xform.translation.truncate();
+        let pos = pos - origin;
+        let coords = BoardCoords::from_xy(pos)?;
+        if coords.row < self.board.rows && coords.col < self.board.cols {
+            let center = coords.to_xy();
+            Some((coords, pos - center))
+        } else {
+            None
+        }
     }
 }

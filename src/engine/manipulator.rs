@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use bevy::asset::{AssetServer, Handle};
 use bevy::ecs::bundle::Bundle;
-use bevy::math::Vec3;
+use bevy::math::Vec2;
 use bevy::render::texture::Image;
 use bevy::sprite::SpriteBundle;
 use bevy::transform::components::Transform;
@@ -10,7 +10,7 @@ use strum::IntoEnumIterator;
 
 use crate::model::{Emitters, Manipulator};
 
-use super::{TILE_HEIGHT, TILE_WIDTH};
+use super::BoardCoords;
 
 pub struct ManipulatorAssets {
     textures: HashMap<Emitters, Handle<Image>>,
@@ -18,6 +18,7 @@ pub struct ManipulatorAssets {
 
 #[derive(Bundle)]
 pub struct ManipulatorBundle {
+    coords: BoardCoords,
     sprite: SpriteBundle,
 }
 
@@ -44,20 +45,14 @@ impl ManipulatorAssets {
 }
 
 impl ManipulatorBundle {
-    pub fn new(
-        manipulator: &Manipulator,
-        row: usize,
-        col: usize,
-        assets: &ManipulatorAssets,
-    ) -> Self {
+    pub fn new(manipulator: &Manipulator, coords: BoardCoords, assets: &ManipulatorAssets) -> Self {
         let texture = assets.textures[&manipulator.emitters].clone();
-        let x = TILE_WIDTH * col as f32;
-        let y = TILE_HEIGHT * row as f32;
         Self {
+            coords,
             sprite: SpriteBundle {
                 texture,
                 transform: Transform {
-                    translation: Vec3::new(x, -y, 2.0),
+                    translation: coords.to_xy().extend(2.0),
                     ..Default::default()
                 },
                 ..Default::default()
@@ -65,3 +60,9 @@ impl ManipulatorBundle {
         }
     }
 }
+
+pub fn is_offset_inside_manipulator(offset: Vec2) -> bool {
+    offset.length_squared() <= MANIPULATOR_SELECTION_RADIUS_SQUARED
+}
+
+const MANIPULATOR_SELECTION_RADIUS_SQUARED: f32 = 256.0;
