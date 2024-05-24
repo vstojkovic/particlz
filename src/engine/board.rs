@@ -8,11 +8,11 @@ use bevy::transform::components::Transform;
 
 use crate::model::{Board, Piece};
 
-use super::border::{BorderBundle, Orientation};
+use super::border::{spawn_horz_border, spawn_vert_border};
 use super::focus::Focus;
-use super::manipulator::ManipulatorBundle;
-use super::particle::ParticleBundle;
-use super::tile::TileBundle;
+use super::manipulator::spawn_manipulator;
+use super::particle::spawn_particle;
+use super::tile::spawn_tile;
 use super::{Assets, BoardCoords};
 
 #[derive(Resource)]
@@ -52,11 +52,11 @@ impl BoardResource {
         parent.with_children(|parent| {
             for row in 0..self.board.rows {
                 for col in 0..self.board.cols {
-                    self.tiles.push(self.board.get_tile(row, col).map(|tile| {
-                        parent
-                            .spawn(TileBundle::new(tile, (row, col).into(), &assets.tiles))
-                            .id()
-                    }));
+                    self.tiles.push(
+                        self.board
+                            .get_tile(row, col)
+                            .map(|tile| spawn_tile(parent, tile, (row, col).into(), &assets.tiles)),
+                    );
                 }
             }
 
@@ -64,14 +64,7 @@ impl BoardResource {
                 for col in 0..self.board.cols {
                     self.horz_borders
                         .push(self.board.get_horz_border(row, col).map(|border| {
-                            parent
-                                .spawn(BorderBundle::new(
-                                    border,
-                                    (row, col).into(),
-                                    Orientation::Horizontal,
-                                    &assets.borders,
-                                ))
-                                .id()
+                            spawn_horz_border(parent, border, (row, col).into(), &assets.borders)
                         }));
                 }
             }
@@ -80,14 +73,7 @@ impl BoardResource {
                 for col in 0..=self.board.cols {
                     self.vert_borders
                         .push(self.board.get_vert_border(row, col).map(|border| {
-                            parent
-                                .spawn(BorderBundle::new(
-                                    border,
-                                    (row, col).into(),
-                                    Orientation::Vertical,
-                                    &assets.borders,
-                                ))
-                                .id()
+                            spawn_vert_border(parent, border, (row, col).into(), &assets.borders)
                         }));
                 }
             }
@@ -95,22 +81,19 @@ impl BoardResource {
             for row in 0..self.board.rows {
                 for col in 0..self.board.cols {
                     self.pieces
-                        .push(self.board.get_piece(row, col).map(|piece| {
-                            match piece {
-                                Piece::Particle(particle) => parent.spawn(ParticleBundle::new(
-                                    particle,
-                                    (row, col).into(),
-                                    &assets.particles,
-                                )),
-                                Piece::Manipulator(manipulator) => {
-                                    parent.spawn(ManipulatorBundle::new(
-                                        manipulator,
-                                        (row, col).into(),
-                                        &assets.manipulators,
-                                    ))
-                                }
-                            }
-                            .id()
+                        .push(self.board.get_piece(row, col).map(|piece| match piece {
+                            Piece::Particle(particle) => spawn_particle(
+                                parent,
+                                particle,
+                                (row, col).into(),
+                                &assets.particles,
+                            ),
+                            Piece::Manipulator(manipulator) => spawn_manipulator(
+                                parent,
+                                manipulator,
+                                (row, col).into(),
+                                &assets.manipulators,
+                            ),
                         }));
                 }
             }

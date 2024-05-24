@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use bevy::asset::{AssetServer, Handle};
 use bevy::ecs::bundle::Bundle;
+use bevy::ecs::entity::Entity;
+use bevy::hierarchy::ChildBuilder;
 use bevy::math::Vec2;
 use bevy::render::texture::Image;
 use bevy::sprite::SpriteBundle;
@@ -17,7 +19,7 @@ pub struct ManipulatorAssets {
 }
 
 #[derive(Bundle)]
-pub struct ManipulatorBundle {
+struct ManipulatorBundle {
     coords: BoardCoords,
     sprite: SpriteBundle,
 }
@@ -45,7 +47,7 @@ impl ManipulatorAssets {
 }
 
 impl ManipulatorBundle {
-    pub fn new(manipulator: &Manipulator, coords: BoardCoords, assets: &ManipulatorAssets) -> Self {
+    fn new(manipulator: &Manipulator, coords: BoardCoords, assets: &ManipulatorAssets) -> Self {
         let texture = assets.textures[&manipulator.emitters].clone();
         Self {
             coords,
@@ -59,6 +61,17 @@ impl ManipulatorBundle {
             },
         }
     }
+}
+
+pub fn spawn_manipulator(
+    parent: &mut ChildBuilder,
+    manipulator: &Manipulator,
+    coords: BoardCoords,
+    assets: &ManipulatorAssets,
+) -> Entity {
+    parent
+        .spawn(ManipulatorBundle::new(manipulator, coords, assets))
+        .id()
 }
 
 pub fn is_offset_inside_manipulator(offset: Vec2) -> bool {

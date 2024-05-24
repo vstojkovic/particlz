@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use bevy::asset::{AssetServer, Handle};
 use bevy::ecs::bundle::Bundle;
+use bevy::ecs::entity::Entity;
+use bevy::hierarchy::ChildBuilder;
 use bevy::math::{Quat, Vec2};
 use bevy::render::texture::Image;
 use bevy::sprite::SpriteBundle;
@@ -17,13 +19,13 @@ pub struct BorderAssets {
 }
 
 #[derive(Bundle)]
-pub struct BorderBundle {
+struct BorderBundle {
     coords: BoardCoords,
     sprite: SpriteBundle,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum Orientation {
+enum Orientation {
     Horizontal,
     Vertical,
 }
@@ -59,7 +61,7 @@ impl BorderAssets {
 }
 
 impl BorderBundle {
-    pub fn new(
+    fn new(
         border: &Border,
         coords: BoardCoords,
         orientation: Orientation,
@@ -79,6 +81,38 @@ impl BorderBundle {
             },
         }
     }
+}
+
+pub fn spawn_horz_border(
+    parent: &mut ChildBuilder,
+    border: &Border,
+    coords: BoardCoords,
+    assets: &BorderAssets,
+) -> Entity {
+    parent
+        .spawn(BorderBundle::new(
+            border,
+            coords,
+            Orientation::Horizontal,
+            assets,
+        ))
+        .id()
+}
+
+pub fn spawn_vert_border(
+    parent: &mut ChildBuilder,
+    border: &Border,
+    coords: BoardCoords,
+    assets: &BorderAssets,
+) -> Entity {
+    parent
+        .spawn(BorderBundle::new(
+            border,
+            coords,
+            Orientation::Vertical,
+            assets,
+        ))
+        .id()
 }
 
 const BORDER_OFFSET_X: f32 = 22.0;

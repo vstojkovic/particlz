@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use bevy::asset::{AssetServer, Handle};
 use bevy::ecs::bundle::Bundle;
+use bevy::ecs::entity::Entity;
+use bevy::hierarchy::ChildBuilder;
 use bevy::render::texture::Image;
 use bevy::sprite::SpriteBundle;
 use bevy::transform::components::Transform;
@@ -16,7 +18,7 @@ pub struct ParticleAssets {
 }
 
 #[derive(Bundle)]
-pub struct ParticleBundle {
+struct ParticleBundle {
     coords: BoardCoords,
     sprite: SpriteBundle,
 }
@@ -38,7 +40,7 @@ impl ParticleAssets {
 }
 
 impl ParticleBundle {
-    pub fn new(particle: &Particle, coords: BoardCoords, assets: &ParticleAssets) -> Self {
+    fn new(particle: &Particle, coords: BoardCoords, assets: &ParticleAssets) -> Self {
         let texture = assets.textures[&particle.tint].clone();
         Self {
             coords,
@@ -52,4 +54,15 @@ impl ParticleBundle {
             },
         }
     }
+}
+
+pub fn spawn_particle(
+    parent: &mut ChildBuilder,
+    particle: &Particle,
+    coords: BoardCoords,
+    assets: &ParticleAssets,
+) -> Entity {
+    parent
+        .spawn(ParticleBundle::new(particle, coords, assets))
+        .id()
 }

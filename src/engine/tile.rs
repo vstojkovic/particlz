@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use bevy::asset::{AssetServer, Handle};
 use bevy::ecs::bundle::Bundle;
+use bevy::ecs::entity::Entity;
+use bevy::hierarchy::ChildBuilder;
 use bevy::render::texture::Image;
 use bevy::sprite::SpriteBundle;
 use bevy::transform::components::Transform;
@@ -16,7 +18,7 @@ pub struct TileAssets {
 }
 
 #[derive(Bundle)]
-pub struct TileBundle {
+struct TileBundle {
     coords: BoardCoords,
     sprite: SpriteBundle,
 }
@@ -47,7 +49,7 @@ impl TileAssets {
 }
 
 impl TileBundle {
-    pub fn new(tile: &Tile, coords: BoardCoords, assets: &TileAssets) -> Self {
+    fn new(tile: &Tile, coords: BoardCoords, assets: &TileAssets) -> Self {
         let texture = assets.textures[&(tile.kind, tile.tint)].clone();
         Self {
             coords,
@@ -61,4 +63,13 @@ impl TileBundle {
             },
         }
     }
+}
+
+pub fn spawn_tile(
+    parent: &mut ChildBuilder,
+    tile: &Tile,
+    coords: BoardCoords,
+    assets: &TileAssets,
+) -> Entity {
+    parent.spawn(TileBundle::new(tile, coords, assets)).id()
 }
