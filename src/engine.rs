@@ -4,8 +4,6 @@ use bevy::asset::AssetServer;
 use bevy::ecs::component::Component;
 use bevy::ecs::system::Resource;
 use bevy::math::Vec2;
-use enumset::EnumSetType;
-use strum_macros::{EnumCount, EnumIter};
 
 pub mod animation;
 pub mod board;
@@ -16,6 +14,8 @@ pub mod manipulator;
 pub mod particle;
 pub mod tile;
 
+use crate::model::Direction;
+
 use self::border::BorderAssets;
 use self::focus::FocusAssets;
 use self::manipulator::ManipulatorAssets;
@@ -24,14 +24,6 @@ use self::tile::TileAssets;
 
 const TILE_WIDTH: f32 = 45.0;
 const TILE_HEIGHT: f32 = 45.0;
-
-#[derive(Debug, Hash, EnumIter, EnumCount, EnumSetType)]
-pub enum Direction {
-    Up,
-    Left,
-    Down,
-    Right,
-}
 
 #[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct BoardCoords {

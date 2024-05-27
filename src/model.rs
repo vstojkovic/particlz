@@ -1,6 +1,7 @@
 //! Engine-agnostic game data and logic
 
-use strum_macros::EnumIter;
+use enumset::{EnumSet, EnumSetType};
+use strum_macros::{EnumCount, EnumIter};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter)]
 pub enum Tint {
@@ -8,6 +9,14 @@ pub enum Tint {
     Green,
     Yellow,
     Red,
+}
+
+#[derive(Debug, Hash, EnumIter, EnumCount, EnumSetType)]
+pub enum Direction {
+    Up,
+    Left,
+    Down,
+    Right,
 }
 
 pub struct Board {
@@ -125,6 +134,37 @@ impl Board {
 
     pub fn take_piece(&mut self, row: usize, col: usize) -> Option<Piece> {
         self.pieces[row * self.cols + col].take()
+    }
+
+    pub fn compute_allowed_moves(&self, row: usize, col: usize) -> EnumSet<Direction> {
+        let mut moves = EnumSet::empty();
+
+        if row > 0
+            && self.get_horz_border(row, col).is_none()
+            && self.get_piece(row - 1, col).is_none()
+        {
+            moves.insert(Direction::Up);
+        }
+        if col > 0
+            && self.get_vert_border(row, col).is_none()
+            && self.get_piece(row, col - 1).is_none()
+        {
+            moves.insert(Direction::Left);
+        }
+        if row < (self.rows - 1)
+            && self.get_horz_border(row + 1, col).is_none()
+            && self.get_piece(row + 1, col).is_none()
+        {
+            moves.insert(Direction::Down);
+        }
+        if col < (self.cols - 1)
+            && self.get_vert_border(row, col + 1).is_none()
+            && self.get_piece(row, col + 1).is_none()
+        {
+            moves.insert(Direction::Right);
+        }
+
+        moves
     }
 }
 

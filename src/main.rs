@@ -8,7 +8,6 @@ use bevy::window::{Window, WindowPlugin};
 use bevy::DefaultPlugins;
 use bevy_tweening::Animator;
 use engine::focus::{get_focus, set_focus};
-use enumset::EnumSet;
 
 mod engine;
 mod model;
@@ -65,13 +64,28 @@ fn select_manipulator(
     for event in events.read() {
         let coords = get_focus(&focus.transmute_lens().query()).coords();
         let coords = match event {
-            SelectManipulatorEvent::Previous => Some(prev_manipulator(&board.model, coords)),
-            SelectManipulatorEvent::Next => Some(next_manipulator(&board.model, coords)),
-            SelectManipulatorEvent::AtCoords(coords) => Some(*coords),
+            SelectManipulatorEvent::Previous => prev_manipulator(&board.model, coords),
+            SelectManipulatorEvent::Next => next_manipulator(&board.model, coords),
+            SelectManipulatorEvent::AtCoords(coords) => {
+                if !board
+                    .model
+                    .compute_allowed_moves(coords.row, coords.col)
+                    .is_empty()
+                {
+                    Some(*coords)
+                } else {
+                    None
+                }
+            }
             SelectManipulatorEvent::Deselect => None,
         };
         let new_focus = coords
-            .map(|coords| Focus::Selected(coords, EnumSet::all()))
+            .map(|coords| {
+                Focus::Selected(
+                    coords,
+                    board.model.compute_allowed_moves(coords.row, coords.col),
+                )
+            })
             .unwrap_or(Focus::None);
         set_focus(new_focus, &mut focus, &mut arrows);
     }
@@ -124,7 +138,12 @@ fn finish_animation(
                 let to_coords = coords.move_to(direction);
                 board.move_piece(from_coords, to_coords, &mut anchor.transmute_lens().query());
                 set_focus(
-                    Focus::Selected(to_coords, EnumSet::all()),
+                    Focus::Selected(
+                        to_coords,
+                        board
+                            .model
+                            .compute_allowed_moves(to_coords.row, to_coords.col),
+                    ),
                     &mut focus,
                     &mut arrows,
                 );
@@ -133,10 +152,11 @@ fn finish_animation(
     }
 }
 
-fn prev_manipulator(board: &Board, coords: Option<BoardCoords>) -> BoardCoords {
+fn prev_manipulator(board: &Board, coords: Option<BoardCoords>) -> Option<BoardCoords> {
     // NOTE: An active board should never have 0 manipulators
     let mut coords = coords.unwrap_or_default();
-    loop {
+    let mut remaining = board.rows * board.cols;
+    while remaining > 0 {
         if coords.col > 0 {
             coords.col -= 1;
         } else {
@@ -148,17 +168,25 @@ fn prev_manipulator(board: &Board, coords: Option<BoardCoords>) -> BoardCoords {
             }
         }
         if let Some(Piece::Manipulator(_)) = board.get_piece(coords.row, coords.col) {
-            return coords;
+            if !board
+                .compute_allowed_moves(coords.row, coords.col)
+                .is_empty()
+            {
+                return Some(coords);
+            }
         }
+        remaining -= 1;
     }
+    None
 }
 
-fn next_manipulator(board: &Board, coords: Option<BoardCoords>) -> BoardCoords {
+fn next_manipulator(board: &Board, coords: Option<BoardCoords>) -> Option<BoardCoords> {
     // NOTE: An active board should never have 0 manipulators
     let max_row = board.rows - 1;
     let max_col = board.cols - 1;
     let mut coords = coords.unwrap_or_else(|| BoardCoords::new(max_row, max_col));
-    loop {
+    let mut remaining = board.rows * board.cols;
+    while remaining > 0 {
         if coords.col < max_row {
             coords.col += 1;
         } else {
@@ -170,9 +198,16 @@ fn next_manipulator(board: &Board, coords: Option<BoardCoords>) -> BoardCoords {
             }
         }
         if let Some(Piece::Manipulator(_)) = board.get_piece(coords.row, coords.col) {
-            return coords;
+            if !board
+                .compute_allowed_moves(coords.row, coords.col)
+                .is_empty()
+            {
+                return Some(coords);
+            }
         }
+        remaining -= 1;
     }
+    None
 }
 
 fn make_test_board() -> Board {
