@@ -122,6 +122,10 @@ impl Board {
     pub fn set_piece<T: Into<Option<Piece>>>(&mut self, row: usize, col: usize, piece: T) {
         self.pieces[row * self.cols + col] = piece.into();
     }
+
+    pub fn take_piece(&mut self, row: usize, col: usize) -> Option<Piece> {
+        self.pieces[row * self.cols + col].take()
+    }
 }
 
 impl Tile {

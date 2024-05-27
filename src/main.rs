@@ -3,30 +3,24 @@ use bevy::asset::AssetServer;
 use bevy::core_pipeline::core_2d::Camera2dBundle;
 use bevy::ecs::schedule::IntoSystemConfigs;
 use bevy::ecs::system::{Commands, Res, ResMut};
-use bevy::input::keyboard::KeyboardInput;
-use bevy::input::mouse::MouseButtonInput;
-use bevy::input::ButtonState;
 use bevy::prelude::*;
-use bevy::window::{PrimaryWindow, Window, WindowPlugin};
+use bevy::window::{Window, WindowPlugin};
 use bevy::DefaultPlugins;
+use bevy_tweening::Animator;
+use engine::focus::{get_focus, set_focus};
 use enumset::EnumSet;
 
 mod engine;
 mod model;
 
+use self::engine::animation::{
+    set_animation, Animation, AnimationFinished, AnimationPlugin, AnimationSet,
+};
 use self::engine::board::BoardResource;
 use self::engine::focus::{Focus, FocusArrow};
-use self::engine::manipulator::is_offset_inside_manipulator;
+use self::engine::input::{InputPlugin, MoveManipulatorEvent, SelectManipulatorEvent};
 use self::engine::{Assets, BoardCoords};
 use self::model::{Board, Border, Emitters, Manipulator, Particle, Piece, Tile, TileKind, Tint};
-
-#[derive(Event)]
-enum SelectManipulatorEvent {
-    Previous,
-    Next,
-    AtCoords(BoardCoords),
-    Deselect,
-}
 
 fn main() {
     let board = make_test_board();
@@ -38,14 +32,18 @@ fn main() {
             }),
             ..Default::default()
         }))
+        .add_plugins(InputPlugin)
+        .add_plugins(AnimationPlugin)
         .insert_resource(BoardResource::new(board))
-        .add_event::<SelectManipulatorEvent>()
         .add_systems(Startup, (load_assets, setup_board).chain())
         .add_systems(
-            FixedPreUpdate,
-            (process_keyboard_input, process_mouse_input),
+            FixedUpdate,
+            (
+                select_manipulator,
+                move_manipulator,
+                finish_animation.after(AnimationSet),
+            ),
         )
-        .add_systems(FixedUpdate, select_manipulator)
         .run();
 }
 
@@ -58,62 +56,6 @@ fn setup_board(mut commands: Commands, mut board: ResMut<BoardResource>, assets:
     board.spawn(&mut commands, &assets);
 }
 
-fn process_keyboard_input(
-    mut keyboard_events: EventReader<KeyboardInput>,
-    mut keyboard_input: Local<ButtonInput<KeyCode>>,
-    mut ev_select_manipulator: EventWriter<SelectManipulatorEvent>,
-) {
-    keyboard_input.clear();
-    for event in keyboard_events.read() {
-        match event.state {
-            ButtonState::Pressed => keyboard_input.press(event.key_code),
-            ButtonState::Released => keyboard_input.release(event.key_code),
-        }
-    }
-
-    if keyboard_input.any_just_pressed([KeyCode::KeyQ, KeyCode::PageUp]) {
-        ev_select_manipulator.send(SelectManipulatorEvent::Previous);
-    } else if keyboard_input.any_just_pressed([KeyCode::KeyE, KeyCode::PageDown]) {
-        ev_select_manipulator.send(SelectManipulatorEvent::Next);
-    }
-}
-
-fn process_mouse_input(
-    mut mouse_events: EventReader<MouseButtonInput>,
-    mut mouse_input: Local<ButtonInput<MouseButton>>,
-    window: Query<&Window, With<PrimaryWindow>>,
-    camera: Query<(&Camera, &GlobalTransform)>,
-    board: Res<BoardResource>,
-    q_xform: Query<&Transform>,
-    mut ev_select_manipulator: EventWriter<SelectManipulatorEvent>,
-) {
-    mouse_input.clear();
-    for event in mouse_events.read() {
-        match event.state {
-            ButtonState::Pressed => mouse_input.press(event.button),
-            ButtonState::Released => mouse_input.release(event.button),
-        }
-    }
-
-    if mouse_input.just_pressed(MouseButton::Left) {
-        let (camera, xform) = camera.single();
-        let window = window.single();
-        let coords_and_offset = window
-            .cursor_position()
-            .and_then(|pos| camera.viewport_to_world_2d(xform, pos))
-            .and_then(|pos| board.coords_at_pos(pos, &q_xform));
-        if let Some((coords, offset)) = coords_and_offset {
-            if let Some(Piece::Manipulator(_)) = board.board.get_piece(coords.row, coords.col) {
-                if is_offset_inside_manipulator(offset) {
-                    ev_select_manipulator.send(SelectManipulatorEvent::AtCoords(coords));
-                }
-            } else {
-                ev_select_manipulator.send(SelectManipulatorEvent::Deselect);
-            }
-        }
-    }
-}
-
 fn select_manipulator(
     mut events: EventReader<SelectManipulatorEvent>,
     board: Res<BoardResource>,
@@ -121,14 +63,73 @@ fn select_manipulator(
     mut arrows: Query<(&FocusArrow, &mut Visibility)>,
 ) {
     for event in events.read() {
-        let coords = Focus::get_coords(&focus.transmute_lens().query());
+        let coords = get_focus(&focus.transmute_lens().query()).coords();
         let coords = match event {
             SelectManipulatorEvent::Previous => Some(prev_manipulator(&board.board, coords)),
             SelectManipulatorEvent::Next => Some(next_manipulator(&board.board, coords)),
             SelectManipulatorEvent::AtCoords(coords) => Some(*coords),
             SelectManipulatorEvent::Deselect => None,
         };
-        Focus::update(coords, EnumSet::all(), &mut focus, &mut arrows);
+        let new_focus = coords
+            .map(|coords| Focus::Selected(coords, EnumSet::all()))
+            .unwrap_or(Focus::None);
+        set_focus(new_focus, &mut focus, &mut arrows);
+    }
+}
+
+fn move_manipulator(
+    mut events: EventReader<MoveManipulatorEvent>,
+    board: Res<BoardResource>,
+    mut anchor: Query<(&mut Animation, &Children)>,
+    mut animator: Query<&mut Animator<Transform>>,
+    mut focus: Query<(&mut Focus, &mut Transform, &Children)>,
+    mut arrows: Query<(&FocusArrow, &mut Visibility)>,
+) {
+    if events.is_empty() {
+        return;
+    }
+    let Some(coords) = get_focus(&focus.transmute_lens().query()).coords() else {
+        for event in events.read() {
+            warn!("Received {:?} without a selected manipulator", event);
+        }
+        return;
+    };
+    let event = events.read().last().unwrap();
+    let anchor_id = board.get_piece(coords).unwrap();
+    set_animation(
+        anchor_id,
+        Animation::Movement(event.0),
+        &mut anchor,
+        &mut animator,
+    );
+    set_focus(Focus::Busy, &mut focus, &mut arrows);
+}
+
+fn finish_animation(
+    mut events: EventReader<AnimationFinished>,
+    mut anchor: Query<(&mut BoardCoords, &mut Transform), Without<Focus>>,
+    mut focus: Query<(&mut Focus, &mut Transform, &Children)>,
+    mut arrows: Query<(&FocusArrow, &mut Visibility)>,
+    mut board: ResMut<BoardResource>,
+) {
+    if events.is_empty() {
+        return;
+    }
+    for event in events.read() {
+        match event.animation {
+            Animation::Idle => unreachable!(),
+            Animation::Movement(direction) => {
+                let (coords, _) = anchor.get_mut(event.anchor).unwrap();
+                let from_coords = *coords;
+                let to_coords = coords.move_to(direction);
+                board.move_piece(from_coords, to_coords, &mut anchor.transmute_lens().query());
+                set_focus(
+                    Focus::Selected(to_coords, EnumSet::all()),
+                    &mut focus,
+                    &mut arrows,
+                );
+            }
+        }
     }
 }
 

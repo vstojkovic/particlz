@@ -3,8 +3,9 @@ use std::collections::HashMap;
 use bevy::asset::{AssetServer, Handle};
 use bevy::ecs::bundle::Bundle;
 use bevy::ecs::entity::Entity;
-use bevy::hierarchy::ChildBuilder;
+use bevy::hierarchy::{BuildChildren, ChildBuilder};
 use bevy::math::Vec2;
+use bevy::prelude::SpatialBundle;
 use bevy::render::texture::Image;
 use bevy::sprite::SpriteBundle;
 use bevy::transform::components::Transform;
@@ -12,6 +13,7 @@ use strum::IntoEnumIterator;
 
 use crate::model::{Emitters, Manipulator};
 
+use super::animation::{AnimationAnchorBundle, AnimationBundle};
 use super::BoardCoords;
 
 pub struct ManipulatorAssets {
@@ -19,9 +21,16 @@ pub struct ManipulatorAssets {
 }
 
 #[derive(Bundle)]
-struct ManipulatorBundle {
+struct ManipulatorAnchorBundle {
     coords: BoardCoords,
+    spatial: SpatialBundle,
+    animation: AnimationAnchorBundle,
+}
+
+#[derive(Bundle)]
+struct ManipulatorBundle {
     sprite: SpriteBundle,
+    animation: AnimationBundle,
 }
 
 impl ManipulatorAssets {
@@ -46,19 +55,31 @@ impl ManipulatorAssets {
     }
 }
 
-impl ManipulatorBundle {
-    fn new(manipulator: &Manipulator, coords: BoardCoords, assets: &ManipulatorAssets) -> Self {
-        let texture = assets.textures[&manipulator.emitters].clone();
+impl ManipulatorAnchorBundle {
+    fn new(coords: BoardCoords) -> Self {
         Self {
             coords,
-            sprite: SpriteBundle {
-                texture,
+            spatial: SpatialBundle {
                 transform: Transform {
                     translation: coords.to_xy().extend(2.0),
                     ..Default::default()
                 },
                 ..Default::default()
             },
+            animation: AnimationAnchorBundle::new(),
+        }
+    }
+}
+
+impl ManipulatorBundle {
+    fn new(manipulator: &Manipulator, anchor: Entity, assets: &ManipulatorAssets) -> Self {
+        let texture = assets.textures[&manipulator.emitters].clone();
+        Self {
+            sprite: SpriteBundle {
+                texture,
+                ..Default::default()
+            },
+            animation: AnimationBundle::new(anchor),
         }
     }
 }
@@ -69,9 +90,12 @@ pub fn spawn_manipulator(
     coords: BoardCoords,
     assets: &ManipulatorAssets,
 ) -> Entity {
-    parent
-        .spawn(ManipulatorBundle::new(manipulator, coords, assets))
-        .id()
+    let mut anchor = parent.spawn(ManipulatorAnchorBundle::new(coords));
+    let anchor_id = anchor.id();
+    anchor.with_children(|anchor| {
+        anchor.spawn(ManipulatorBundle::new(manipulator, anchor_id, assets));
+    });
+    anchor_id
 }
 
 pub fn is_offset_inside_manipulator(offset: Vec2) -> bool {

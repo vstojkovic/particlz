@@ -5,11 +5,13 @@ use bevy::ecs::component::Component;
 use bevy::ecs::system::Resource;
 use bevy::math::Vec2;
 use enumset::EnumSetType;
-use strum_macros::EnumIter;
+use strum_macros::{EnumCount, EnumIter};
 
+pub mod animation;
 pub mod board;
 pub mod border;
 pub mod focus;
+pub mod input;
 pub mod manipulator;
 pub mod particle;
 pub mod tile;
@@ -23,7 +25,7 @@ use self::tile::TileAssets;
 const TILE_WIDTH: f32 = 45.0;
 const TILE_HEIGHT: f32 = 45.0;
 
-#[derive(Debug, Hash, EnumIter, EnumSetType)]
+#[derive(Debug, Hash, EnumIter, EnumCount, EnumSetType)]
 pub enum Direction {
     Left,
     Right,
@@ -31,7 +33,7 @@ pub enum Direction {
     Down,
 }
 
-#[derive(Component, Debug, Default, Clone, Copy)]
+#[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct BoardCoords {
     pub row: usize,
     pub col: usize,
@@ -49,6 +51,16 @@ pub struct Assets {
 impl BoardCoords {
     pub fn new(row: usize, col: usize) -> Self {
         Self { row, col }
+    }
+
+    pub fn move_to(self, direction: Direction) -> Self {
+        match direction {
+            Direction::Left => (self.row, self.col - 1),
+            Direction::Right => (self.row, self.col + 1),
+            Direction::Up => (self.row - 1, self.col),
+            Direction::Down => (self.row + 1, self.col),
+        }
+        .into()
     }
 
     fn from_xy(pos: Vec2) -> Option<Self> {

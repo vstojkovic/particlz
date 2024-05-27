@@ -16,8 +16,18 @@ use strum::IntoEnumIterator;
 
 use super::{BoardCoords, Direction};
 
-#[derive(Component, Default)]
-pub struct Focus(Option<BoardCoords>);
+#[derive(Component, Debug, Clone)]
+pub enum Focus {
+    None,
+    Selected(BoardCoords, EnumSet<Direction>),
+    Busy,
+}
+
+impl Default for Focus {
+    fn default() -> Self {
+        Self::None
+    }
+}
 
 #[derive(Component)]
 pub struct FocusArrow(Direction);
@@ -39,37 +49,10 @@ struct FocusArrowBundle {
 }
 
 impl Focus {
-    pub fn spawn(parent: &mut ChildBuilder, assets: &FocusAssets) {
-        let mut focus = parent.spawn(FocusBundle::default());
-        focus.with_children(|focus| {
-            for direction in Direction::iter() {
-                focus.spawn(FocusArrowBundle::new(direction, assets));
-            }
-        });
-    }
-
-    pub fn get_coords(query: &Query<&Focus>) -> Option<BoardCoords> {
-        query.single().0
-    }
-
-    pub fn update(
-        coords: Option<BoardCoords>,
-        directions: EnumSet<Direction>,
-        q_focus: &mut Query<(&mut Focus, &mut Transform, &Children)>,
-        q_arrow: &mut Query<(&FocusArrow, &mut Visibility)>,
-    ) {
-        let (mut focus, mut xform, children) = q_focus.single_mut();
-        focus.0 = coords;
-        if let Some(coords) = coords {
-            xform.translation = coords.to_xy().extend(3.0);
-        }
-        for &child in children {
-            let (arrow, mut child_visibility) = q_arrow.get_mut(child).unwrap();
-            let show = coords.is_some() && directions.contains(arrow.0);
-            *child_visibility = match show {
-                false => Visibility::Hidden,
-                true => Visibility::Visible,
-            }
+    pub fn coords(&self) -> Option<BoardCoords> {
+        match self {
+            Focus::Selected(coords, _) => Some(*coords),
+            _ => None,
         }
     }
 }
@@ -92,19 +75,13 @@ impl FocusAssets {
 
 impl FocusArrowBundle {
     fn new(direction: Direction, assets: &FocusAssets) -> Self {
-        let offset = match direction {
-            Direction::Left => Vec2::new(-11.0, 0.0),
-            Direction::Right => Vec2::new(11.0, 0.0),
-            Direction::Up => Vec2::new(0.0, 11.0),
-            Direction::Down => Vec2::new(0.0, -11.0),
-        };
         Self {
             arrow: FocusArrow(direction),
             sprite: SpriteBundle {
                 texture: assets.textures[&direction].clone(),
                 visibility: Visibility::Hidden,
                 transform: Transform {
-                    translation: offset.extend(0.0),
+                    translation: direction_offset(direction).extend(0.0),
                     ..Default::default()
                 },
                 ..Default::default()
@@ -112,3 +89,66 @@ impl FocusArrowBundle {
         }
     }
 }
+
+pub fn spawn_focus(parent: &mut ChildBuilder, assets: &FocusAssets) {
+    let mut focus = parent.spawn(FocusBundle::default());
+    focus.with_children(|focus| {
+        for direction in Direction::iter() {
+            focus.spawn(FocusArrowBundle::new(direction, assets));
+        }
+    });
+}
+
+pub fn get_focus<'q>(query: &'q Query<&Focus>) -> &'q Focus {
+    &*query.single()
+}
+
+pub fn set_focus(
+    value: Focus,
+    q_focus: &mut Query<(&mut Focus, &mut Transform, &Children)>,
+    q_arrow: &mut Query<(&FocusArrow, &mut Visibility)>,
+) {
+    let (mut focus, mut xform, children) = q_focus.single_mut();
+    let (coords, directions) = match &value {
+        Focus::Selected(coords, directions) => (Some(coords), Some(directions)),
+        _ => (None, None),
+    };
+    if let Some(coords) = coords {
+        xform.translation = coords.to_xy().extend(3.0);
+    }
+    for &child in children {
+        let (arrow, mut child_visibility) = q_arrow.get_mut(child).unwrap();
+        let show = directions
+            .map(|directions| directions.contains(arrow.0))
+            .unwrap_or(false);
+        *child_visibility = match show {
+            false => Visibility::Hidden,
+            true => Visibility::Visible,
+        }
+    }
+    *focus = value;
+}
+
+pub fn focus_direction_for_offset(offset: Vec2) -> Option<Direction> {
+    for direction in Direction::iter() {
+        if (offset - direction_offset(direction))
+            .abs()
+            .cmple(ARROW_HALF_SIZE)
+            .all()
+        {
+            return Some(direction);
+        }
+    }
+    None
+}
+
+fn direction_offset(direction: Direction) -> Vec2 {
+    match direction {
+        Direction::Left => Vec2::new(-11.0, 0.0),
+        Direction::Right => Vec2::new(11.0, 0.0),
+        Direction::Up => Vec2::new(0.0, 11.0),
+        Direction::Down => Vec2::new(0.0, -11.0),
+    }
+}
+
+const ARROW_HALF_SIZE: Vec2 = Vec2::new(7.0, 7.0);

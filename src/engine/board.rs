@@ -9,7 +9,7 @@ use bevy::transform::components::Transform;
 use crate::model::{Board, Piece};
 
 use super::border::{spawn_horz_border, spawn_vert_border};
-use super::focus::Focus;
+use super::focus::spawn_focus;
 use super::manipulator::spawn_manipulator;
 use super::particle::spawn_particle;
 use super::tile::spawn_tile;
@@ -98,7 +98,7 @@ impl BoardResource {
                 }
             }
 
-            Focus::spawn(parent, &assets.focus);
+            spawn_focus(parent, &assets.focus);
         });
     }
 
@@ -117,5 +117,31 @@ impl BoardResource {
         } else {
             None
         }
+    }
+
+    pub fn get_piece(&self, coords: BoardCoords) -> Option<Entity> {
+        self.pieces[coords.row * self.board.cols + coords.col].clone()
+    }
+
+    pub fn move_piece(
+        &mut self,
+        from_coords: BoardCoords,
+        to_coords: BoardCoords,
+        q_anchor: &mut Query<(&mut BoardCoords, &mut Transform)>,
+    ) {
+        let from_idx = from_coords.row * self.board.cols + from_coords.col;
+
+        let Some(anchor) = self.pieces[from_idx].take() else {
+            return;
+        };
+        let to_idx = to_coords.row * self.board.cols + to_coords.col;
+        self.pieces[to_idx] = Some(anchor);
+
+        let piece = self.board.take_piece(from_coords.row, from_coords.col);
+        self.board.set_piece(to_coords.row, to_coords.col, piece);
+
+        let (mut anchor_coords, mut anchor_xform) = q_anchor.get_mut(anchor).unwrap();
+        *anchor_coords = to_coords;
+        anchor_xform.translation = to_coords.to_xy().extend(anchor_xform.translation.z);
     }
 }
