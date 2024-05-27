@@ -71,10 +71,10 @@ impl AnimationBundle {
         let mut sequence = Sequence::with_capacity(Direction::COUNT);
         for direction in Direction::iter() {
             let end = match direction {
-                Direction::Left => Vec2::new(-TILE_WIDTH, 0.0),
-                Direction::Right => Vec2::new(TILE_WIDTH, 0.0),
                 Direction::Up => Vec2::new(0.0, TILE_HEIGHT),
+                Direction::Left => Vec2::new(-TILE_WIDTH, 0.0),
                 Direction::Down => Vec2::new(0.0, -TILE_HEIGHT),
+                Direction::Right => Vec2::new(TILE_WIDTH, 0.0),
             };
             let tween = Tween::new(
                 EaseFunction::SineInOut,

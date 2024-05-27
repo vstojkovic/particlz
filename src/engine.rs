@@ -27,10 +27,10 @@ const TILE_HEIGHT: f32 = 45.0;
 
 #[derive(Debug, Hash, EnumIter, EnumCount, EnumSetType)]
 pub enum Direction {
-    Left,
-    Right,
     Up,
+    Left,
     Down,
+    Right,
 }
 
 #[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -55,10 +55,10 @@ impl BoardCoords {
 
     pub fn move_to(self, direction: Direction) -> Self {
         match direction {
-            Direction::Left => (self.row, self.col - 1),
-            Direction::Right => (self.row, self.col + 1),
             Direction::Up => (self.row - 1, self.col),
+            Direction::Left => (self.row, self.col - 1),
             Direction::Down => (self.row + 1, self.col),
+            Direction::Right => (self.row, self.col + 1),
         }
         .into()
     }

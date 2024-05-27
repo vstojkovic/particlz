@@ -62,10 +62,10 @@ impl FocusAssets {
         let mut textures = HashMap::new();
         for direction in Direction::iter() {
             let path = match direction {
-                Direction::Left => "focus-l.png",
-                Direction::Right => "focus-r.png",
                 Direction::Up => "focus-u.png",
+                Direction::Left => "focus-l.png",
                 Direction::Down => "focus-d.png",
+                Direction::Right => "focus-r.png",
             };
             textures.insert(direction, server.load(path));
         }
@@ -144,10 +144,10 @@ pub fn focus_direction_for_offset(offset: Vec2) -> Option<Direction> {
 
 fn direction_offset(direction: Direction) -> Vec2 {
     match direction {
-        Direction::Left => Vec2::new(-11.0, 0.0),
-        Direction::Right => Vec2::new(11.0, 0.0),
         Direction::Up => Vec2::new(0.0, 11.0),
+        Direction::Left => Vec2::new(-11.0, 0.0),
         Direction::Down => Vec2::new(0.0, -11.0),
+        Direction::Right => Vec2::new(11.0, 0.0),
     }
 }
 
