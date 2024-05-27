@@ -65,8 +65,8 @@ fn select_manipulator(
     for event in events.read() {
         let coords = get_focus(&focus.transmute_lens().query()).coords();
         let coords = match event {
-            SelectManipulatorEvent::Previous => Some(prev_manipulator(&board.board, coords)),
-            SelectManipulatorEvent::Next => Some(next_manipulator(&board.board, coords)),
+            SelectManipulatorEvent::Previous => Some(prev_manipulator(&board.model, coords)),
+            SelectManipulatorEvent::Next => Some(next_manipulator(&board.model, coords)),
             SelectManipulatorEvent::AtCoords(coords) => Some(*coords),
             SelectManipulatorEvent::Deselect => None,
         };

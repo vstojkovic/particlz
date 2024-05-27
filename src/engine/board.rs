@@ -17,7 +17,7 @@ use super::{Assets, BoardCoords};
 
 #[derive(Resource)]
 pub struct BoardResource {
-    pub board: Board,
+    pub model: Board,
     parent: Entity,
     tiles: Vec<Option<Entity>>,
     horz_borders: Vec<Option<Entity>>,
@@ -37,7 +37,7 @@ impl BoardResource {
         let vert_borders = Vec::with_capacity(board.vert_borders.len());
         let pieces = Vec::with_capacity(board.pieces.len());
         Self {
-            board,
+            model: board,
             parent: Entity::PLACEHOLDER,
             tiles,
             horz_borders,
@@ -50,38 +50,38 @@ impl BoardResource {
         let mut parent = commands.spawn(BoardBundle::default());
         self.parent = parent.id();
         parent.with_children(|parent| {
-            for row in 0..self.board.rows {
-                for col in 0..self.board.cols {
+            for row in 0..self.model.rows {
+                for col in 0..self.model.cols {
                     self.tiles.push(
-                        self.board
+                        self.model
                             .get_tile(row, col)
                             .map(|tile| spawn_tile(parent, tile, (row, col).into(), &assets.tiles)),
                     );
                 }
             }
 
-            for row in 0..=self.board.rows {
-                for col in 0..self.board.cols {
+            for row in 0..=self.model.rows {
+                for col in 0..self.model.cols {
                     self.horz_borders
-                        .push(self.board.get_horz_border(row, col).map(|border| {
+                        .push(self.model.get_horz_border(row, col).map(|border| {
                             spawn_horz_border(parent, border, (row, col).into(), &assets.borders)
                         }));
                 }
             }
 
-            for row in 0..self.board.rows {
-                for col in 0..=self.board.cols {
+            for row in 0..self.model.rows {
+                for col in 0..=self.model.cols {
                     self.vert_borders
-                        .push(self.board.get_vert_border(row, col).map(|border| {
+                        .push(self.model.get_vert_border(row, col).map(|border| {
                             spawn_vert_border(parent, border, (row, col).into(), &assets.borders)
                         }));
                 }
             }
 
-            for row in 0..self.board.rows {
-                for col in 0..self.board.cols {
+            for row in 0..self.model.rows {
+                for col in 0..self.model.cols {
                     self.pieces
-                        .push(self.board.get_piece(row, col).map(|piece| match piece {
+                        .push(self.model.get_piece(row, col).map(|piece| match piece {
                             Piece::Particle(particle) => spawn_particle(
                                 parent,
                                 particle,
@@ -111,7 +111,7 @@ impl BoardResource {
         let origin = xform.translation.truncate();
         let pos = pos - origin;
         let coords = BoardCoords::from_xy(pos)?;
-        if coords.row < self.board.rows && coords.col < self.board.cols {
+        if coords.row < self.model.rows && coords.col < self.model.cols {
             let center = coords.to_xy();
             Some((coords, pos - center))
         } else {
@@ -120,7 +120,7 @@ impl BoardResource {
     }
 
     pub fn get_piece(&self, coords: BoardCoords) -> Option<Entity> {
-        self.pieces[coords.row * self.board.cols + coords.col].clone()
+        self.pieces[coords.row * self.model.cols + coords.col].clone()
     }
 
     pub fn move_piece(
@@ -129,16 +129,16 @@ impl BoardResource {
         to_coords: BoardCoords,
         q_anchor: &mut Query<(&mut BoardCoords, &mut Transform)>,
     ) {
-        let from_idx = from_coords.row * self.board.cols + from_coords.col;
+        let from_idx = from_coords.row * self.model.cols + from_coords.col;
 
         let Some(anchor) = self.pieces[from_idx].take() else {
             return;
         };
-        let to_idx = to_coords.row * self.board.cols + to_coords.col;
+        let to_idx = to_coords.row * self.model.cols + to_coords.col;
         self.pieces[to_idx] = Some(anchor);
 
-        let piece = self.board.take_piece(from_coords.row, from_coords.col);
-        self.board.set_piece(to_coords.row, to_coords.col, piece);
+        let piece = self.model.take_piece(from_coords.row, from_coords.col);
+        self.model.set_piece(to_coords.row, to_coords.col, piece);
 
         let (mut anchor_coords, mut anchor_xform) = q_anchor.get_mut(anchor).unwrap();
         *anchor_coords = to_coords;
