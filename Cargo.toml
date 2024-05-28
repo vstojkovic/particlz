@@ -4,8 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+base64 = "0.22.1"
 bevy = "0.13.2"
 bevy_tweening = "0.10"
+bitter = "0.7.0"
 enumset = "1"
 strum = "0.26"
 strum_macros = "0.26"
+thiserror = "1"

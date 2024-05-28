@@ -1,9 +1,14 @@
 //! Engine-agnostic game data and logic
 
 use enumset::{EnumSet, EnumSetType};
-use strum_macros::{EnumCount, EnumIter};
+use strum_macros::{EnumCount, EnumIter, FromRepr};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter)]
+mod pbc1;
+
+pub use pbc1::Pbc1DecodeError;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter, FromRepr)]
+#[repr(u8)]
 pub enum Tint {
     White,
     Green,
@@ -33,7 +38,8 @@ pub struct Tile {
     pub tint: Tint,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter, FromRepr)]
+#[repr(u8)]
 pub enum TileKind {
     Platform,
     Collector,
@@ -58,11 +64,12 @@ pub struct Manipulator {
     pub emitters: Emitters,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter, FromRepr)]
+#[repr(u8)]
 pub enum Emitters {
     Left,
-    Right,
     Up,
+    Right,
     Down,
     LeftUp,
     LeftDown,
@@ -98,6 +105,10 @@ impl Board {
             vert_borders,
             pieces,
         }
+    }
+
+    pub fn from_pbc1(code: &str) -> Result<Self, Pbc1DecodeError> {
+        pbc1::decode(code)
     }
 
     pub fn get_tile(&self, row: usize, col: usize) -> Option<&Tile> {

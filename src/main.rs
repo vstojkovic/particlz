@@ -22,7 +22,11 @@ use self::engine::{Assets, BoardCoords};
 use self::model::{Board, Border, Emitters, Manipulator, Particle, Piece, Tile, TileKind, Tint};
 
 fn main() {
-    let board = make_test_board();
+    let board = if let Some(code) = std::env::args().nth(1) {
+        Board::from_pbc1(&code).unwrap()
+    } else {
+        make_test_board()
+    };
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
@@ -187,7 +191,7 @@ fn next_manipulator(board: &Board, coords: Option<BoardCoords>) -> Option<BoardC
     let mut coords = coords.unwrap_or_else(|| BoardCoords::new(max_row, max_col));
     let mut remaining = board.rows * board.cols;
     while remaining > 0 {
-        if coords.col < max_row {
+        if coords.col < max_col {
             coords.col += 1;
         } else {
             coords.col = 0;
