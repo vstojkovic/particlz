@@ -73,7 +73,7 @@ impl BorderBundle {
             sprite: SpriteBundle {
                 texture,
                 transform: Transform {
-                    translation: (coords.to_xy() - orientation.offset()).extend(2.0),
+                    translation: (coords.to_xy() - orientation.offset()).extend(Z_LAYER),
                     rotation: orientation.rotation(),
                     ..Default::default()
                 },
@@ -115,5 +115,6 @@ pub fn spawn_vert_border(
         .id()
 }
 
-const BORDER_OFFSET_X: f32 = 22.0;
-const BORDER_OFFSET_Y: f32 = 22.0;
+pub const BORDER_OFFSET_X: f32 = 22.0;
+pub const BORDER_OFFSET_Y: f32 = 22.0;
+const Z_LAYER: f32 = 2.0;

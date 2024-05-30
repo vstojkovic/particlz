@@ -1,6 +1,6 @@
 //! Engine-agnostic game data and logic
 
-use enumset::{EnumSet, EnumSetType};
+use enumset::{enum_set, EnumSet, EnumSetType};
 use strum_macros::{EnumCount, EnumIter, FromRepr};
 
 mod pbc1;
@@ -77,6 +77,19 @@ pub enum Emitters {
     RightDown,
     LeftRight,
     UpDown,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct BeamTarget {
+    pub kind: BeamTargetKind,
+    pub row: usize,
+    pub col: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum BeamTargetKind {
+    Piece,
+    Border,
 }
 
 impl Board {
@@ -177,6 +190,41 @@ impl Board {
 
         moves
     }
+
+    pub fn find_beam_target(&self, row: usize, col: usize, direction: Direction) -> BeamTarget {
+        let (row_delta, col_delta, mut border_row, mut border_col, get_border): (
+            isize,
+            isize,
+            usize,
+            usize,
+            fn(&Self, usize, usize) -> Option<&Border>,
+        ) = match direction {
+            Direction::Up => (-1, 0, row, col, Self::get_horz_border),
+            Direction::Left => (0, -1, row, col, Self::get_vert_border),
+            Direction::Down => (1, 0, row + 1, col, Self::get_horz_border),
+            Direction::Right => (0, 1, row, col + 1, Self::get_vert_border),
+        };
+        let (mut piece_row, mut piece_col) = (row, col);
+
+        loop {
+            if let Some(Border::Wall) = get_border(self, border_row, border_col) {
+                return BeamTarget::border(border_row, border_col);
+            }
+            match border_row.checked_add_signed(row_delta) {
+                Some(row) if (row <= self.rows) => border_row = row,
+                _ => return BeamTarget::border(border_row, border_col),
+            }
+            match border_col.checked_add_signed(col_delta) {
+                Some(col) if (col <= self.cols) => border_col = col,
+                _ => return BeamTarget::border(border_row, border_col),
+            }
+            piece_row = piece_row.wrapping_add_signed(row_delta);
+            piece_col = piece_col.wrapping_add_signed(col_delta);
+            if self.get_piece(piece_row, piece_col).is_some() {
+                return BeamTarget::piece(piece_row, piece_col);
+            }
+        }
+    }
 }
 
 impl Tile {
@@ -195,6 +243,41 @@ impl Particle {
 impl Manipulator {
     pub fn new(emitters: Emitters) -> Self {
         Self { emitters }
+    }
+}
+
+impl Emitters {
+    pub fn directions(self) -> EnumSet<Direction> {
+        match self {
+            Self::Left => enum_set!(Direction::Left),
+            Self::Up => enum_set!(Direction::Up),
+            Self::Right => enum_set!(Direction::Right),
+            Self::Down => enum_set!(Direction::Down),
+            Self::LeftUp => enum_set!(Direction::Left | Direction::Up),
+            Self::LeftDown => enum_set!(Direction::Left | Direction::Down),
+            Self::RightUp => enum_set!(Direction::Right | Direction::Up),
+            Self::RightDown => enum_set!(Direction::Right | Direction::Down),
+            Self::LeftRight => enum_set!(Direction::Left | Direction::Right),
+            Self::UpDown => enum_set!(Direction::Up | Direction::Down),
+        }
+    }
+}
+
+impl BeamTarget {
+    pub fn border(row: usize, col: usize) -> Self {
+        Self {
+            kind: BeamTargetKind::Border,
+            row,
+            col,
+        }
+    }
+
+    pub fn piece(row: usize, col: usize) -> Self {
+        Self {
+            kind: BeamTargetKind::Piece,
+            row,
+            col,
+        }
     }
 }
 

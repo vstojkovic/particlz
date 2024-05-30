@@ -114,7 +114,7 @@ pub fn set_focus(
         _ => (None, None),
     };
     if let Some(coords) = coords {
-        xform.translation = coords.to_xy().extend(3.0);
+        xform.translation = coords.to_xy().extend(Z_LAYER);
     }
     for &child in children {
         let (arrow, mut child_visibility) = q_arrow.get_mut(child).unwrap();
@@ -152,3 +152,4 @@ fn direction_offset(direction: Direction) -> Vec2 {
 }
 
 const ARROW_HALF_SIZE: Vec2 = Vec2::new(7.0, 7.0);
+const Z_LAYER: f32 = 3.0;

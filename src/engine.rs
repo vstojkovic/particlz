@@ -6,6 +6,7 @@ use bevy::ecs::system::Resource;
 use bevy::math::Vec2;
 
 pub mod animation;
+pub mod beam;
 pub mod board;
 pub mod border;
 pub mod focus;

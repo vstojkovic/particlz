@@ -8,7 +8,7 @@ use bevy::ecs::event::{Event, EventReader, EventWriter};
 use bevy::ecs::schedule::{IntoSystemConfigs, SystemSet};
 use bevy::ecs::system::Query;
 use bevy::hierarchy::Children;
-use bevy::math::{Vec2, Vec3};
+use bevy::math::Vec2;
 use bevy::transform::components::Transform;
 use bevy_tweening::lens::TransformPositionLens;
 use bevy_tweening::{
@@ -67,7 +67,7 @@ impl AnimationAnchorBundle {
 }
 
 impl AnimationBundle {
-    pub fn new(anchor: Entity) -> Self {
+    pub fn new(anchor: Entity, z: f32) -> Self {
         let mut sequence = Sequence::with_capacity(Direction::COUNT);
         for direction in Direction::iter() {
             let end = match direction {
@@ -80,8 +80,8 @@ impl AnimationBundle {
                 EaseFunction::SineInOut,
                 Duration::from_millis(500),
                 TransformPositionLens {
-                    start: Vec3::ZERO,
-                    end: end.extend(0.0),
+                    start: Vec2::ZERO.extend(z),
+                    end: end.extend(z),
                 },
             );
             let tween = tween.with_completed_event(anchor.to_bits());
@@ -91,8 +91,8 @@ impl AnimationBundle {
             EaseMethod::Linear,
             Duration::from_nanos(1),
             TransformPositionLens {
-                start: Vec3::ZERO,
-                end: Vec3::ZERO,
+                start: Vec2::ZERO.extend(z),
+                end: Vec2::ZERO.extend(z),
             },
         ));
         sequence.set_progress(1.0);
@@ -123,6 +123,10 @@ fn animation_system(
     for event in ev_tweens.read() {
         let anchor = Entity::from_bits(event.user_data);
         let (&animation, _) = q_anchor.get(anchor).unwrap();
+        if let Animation::Idle = animation {
+            // we've already processed this anchor
+            continue;
+        }
         set_animation(anchor, Animation::Idle, &mut q_anchor, &mut q_animator);
         ev_animation.send(AnimationFinished { anchor, animation });
     }

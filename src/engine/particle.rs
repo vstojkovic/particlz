@@ -47,7 +47,7 @@ impl ParticleBundle {
             sprite: SpriteBundle {
                 texture,
                 transform: Transform {
-                    translation: coords.to_xy().extend(2.0),
+                    translation: coords.to_xy().extend(Z_LAYER),
                     ..Default::default()
                 },
                 ..Default::default()
@@ -66,3 +66,5 @@ pub fn spawn_particle(
         .spawn(ParticleBundle::new(particle, coords, assets))
         .id()
 }
+
+const Z_LAYER: f32 = 2.0;

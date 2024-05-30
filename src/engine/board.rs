@@ -92,6 +92,7 @@ impl BoardResource {
                                 parent,
                                 manipulator,
                                 (row, col).into(),
+                                &self.model,
                                 &assets.manipulators,
                             ),
                         }));

@@ -11,9 +11,10 @@ use bevy::sprite::SpriteBundle;
 use bevy::transform::components::Transform;
 use strum::IntoEnumIterator;
 
-use crate::model::{Emitters, Manipulator};
+use crate::model::{Board, Emitters, Manipulator};
 
 use super::animation::{AnimationAnchorBundle, AnimationBundle};
+use super::beam::spawn_beams;
 use super::BoardCoords;
 
 pub struct ManipulatorAssets {
@@ -61,7 +62,7 @@ impl ManipulatorAnchorBundle {
             coords,
             spatial: SpatialBundle {
                 transform: Transform {
-                    translation: coords.to_xy().extend(2.0),
+                    translation: coords.to_xy().extend(0.0),
                     ..Default::default()
                 },
                 ..Default::default()
@@ -77,9 +78,13 @@ impl ManipulatorBundle {
         Self {
             sprite: SpriteBundle {
                 texture,
+                transform: Transform {
+                    translation: Vec2::ZERO.extend(Z_LAYER),
+                    ..Default::default()
+                },
                 ..Default::default()
             },
-            animation: AnimationBundle::new(anchor),
+            animation: AnimationBundle::new(anchor, Z_LAYER),
         }
     }
 }
@@ -88,14 +93,19 @@ pub fn spawn_manipulator(
     parent: &mut ChildBuilder,
     manipulator: &Manipulator,
     coords: BoardCoords,
+    board: &Board,
     assets: &ManipulatorAssets,
 ) -> Entity {
     let mut anchor = parent.spawn(ManipulatorAnchorBundle::new(coords));
-    let anchor_id = anchor.id();
     anchor.with_children(|anchor| {
-        anchor.spawn(ManipulatorBundle::new(manipulator, anchor_id, assets));
+        anchor.spawn(ManipulatorBundle::new(
+            manipulator,
+            anchor.parent_entity(),
+            assets,
+        ));
+        spawn_beams(anchor, coords, manipulator.emitters, board)
     });
-    anchor_id
+    anchor.id()
 }
 
 pub fn is_offset_inside_manipulator(offset: Vec2) -> bool {
@@ -103,3 +113,4 @@ pub fn is_offset_inside_manipulator(offset: Vec2) -> bool {
 }
 
 const MANIPULATOR_SELECTION_RADIUS_SQUARED: f32 = 256.0;
+const Z_LAYER: f32 = 2.0;

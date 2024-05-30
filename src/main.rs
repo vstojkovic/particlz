@@ -7,6 +7,7 @@ use bevy::prelude::*;
 use bevy::window::{Window, WindowPlugin};
 use bevy::DefaultPlugins;
 use bevy_tweening::Animator;
+use engine::beam::{retarget_beams, RetargetBeams};
 use engine::focus::{get_focus, set_focus};
 
 mod engine;
@@ -37,6 +38,7 @@ fn main() {
         }))
         .add_plugins(InputPlugin)
         .add_plugins(AnimationPlugin)
+        .add_event::<RetargetBeams>()
         .insert_resource(BoardResource::new(board))
         .add_systems(Startup, (load_assets, setup_board).chain())
         .add_systems(
@@ -45,6 +47,7 @@ fn main() {
                 select_manipulator,
                 move_manipulator,
                 finish_animation.after(AnimationSet),
+                retarget_beams.after(finish_animation),
             ),
         )
         .run();
@@ -124,16 +127,17 @@ fn move_manipulator(
 }
 
 fn finish_animation(
-    mut events: EventReader<AnimationFinished>,
+    mut ev_animation: EventReader<AnimationFinished>,
+    mut ev_retarget: EventWriter<RetargetBeams>,
     mut anchor: Query<(&mut BoardCoords, &mut Transform), Without<Focus>>,
     mut focus: Query<(&mut Focus, &mut Transform, &Children)>,
     mut arrows: Query<(&FocusArrow, &mut Visibility)>,
     mut board: ResMut<BoardResource>,
 ) {
-    if events.is_empty() {
+    if ev_animation.is_empty() {
         return;
     }
-    for event in events.read() {
+    for event in ev_animation.read() {
         match event.animation {
             Animation::Idle => unreachable!(),
             Animation::Movement(direction) => {
@@ -154,6 +158,7 @@ fn finish_animation(
             }
         }
     }
+    ev_retarget.send(RetargetBeams);
 }
 
 fn prev_manipulator(board: &Board, coords: Option<BoardCoords>) -> Option<BoardCoords> {

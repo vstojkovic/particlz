@@ -56,7 +56,7 @@ impl TileBundle {
             sprite: SpriteBundle {
                 texture,
                 transform: Transform {
-                    translation: coords.to_xy().extend(0.0),
+                    translation: coords.to_xy().extend(Z_LAYER),
                     ..Default::default()
                 },
                 ..Default::default()
@@ -73,3 +73,5 @@ pub fn spawn_tile(
 ) -> Entity {
     parent.spawn(TileBundle::new(tile, coords, assets)).id()
 }
+
+const Z_LAYER: f32 = 0.0;
