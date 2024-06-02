@@ -15,7 +15,7 @@ pub mod manipulator;
 pub mod particle;
 pub mod tile;
 
-use crate::model::{BoardCoords, Direction};
+use crate::model::BoardCoords;
 
 use self::border::BorderAssets;
 use self::focus::FocusAssets;

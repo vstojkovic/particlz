@@ -14,9 +14,9 @@ use bevy::transform::components::Transform;
 use enumset::EnumSet;
 use strum::IntoEnumIterator;
 
-use crate::model::BoardCoords;
+use crate::model::{BoardCoords, Direction};
 
-use super::{Direction, EngineCoords};
+use super::EngineCoords;
 
 #[derive(Component, Debug, Clone)]
 pub enum Focus {

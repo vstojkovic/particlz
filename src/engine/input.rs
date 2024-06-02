@@ -11,12 +11,11 @@ use bevy::render::camera::Camera;
 use bevy::transform::components::{GlobalTransform, Transform};
 use bevy::window::{PrimaryWindow, Window};
 
-use crate::model::{BoardCoords, Piece};
+use crate::model::{BoardCoords, Direction, Piece};
 
 use super::board::BoardResource;
 use super::focus::{focus_direction_for_offset, get_focus, Focus};
 use super::manipulator::is_offset_inside_manipulator;
-use super::Direction;
 
 pub struct InputPlugin;
 

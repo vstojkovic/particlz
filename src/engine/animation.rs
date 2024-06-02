@@ -17,7 +17,9 @@ use bevy_tweening::{
 };
 use strum::{EnumCount, IntoEnumIterator};
 
-use super::{Direction, TILE_HEIGHT, TILE_WIDTH};
+use crate::model::Direction;
+
+use super::{TILE_HEIGHT, TILE_WIDTH};
 
 pub struct AnimationPlugin;
 

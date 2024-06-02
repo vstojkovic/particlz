@@ -7,8 +7,6 @@ use bevy::prelude::*;
 use bevy::window::{Window, WindowPlugin};
 use bevy::DefaultPlugins;
 use bevy_tweening::Animator;
-use engine::beam::{retarget_beams, RetargetBeams};
-use engine::focus::{get_focus, set_focus};
 
 mod engine;
 mod model;
@@ -16,8 +14,9 @@ mod model;
 use self::engine::animation::{
     set_animation, Animation, AnimationFinished, AnimationPlugin, AnimationSet,
 };
+use self::engine::beam::{retarget_beams, RetargetBeams};
 use self::engine::board::BoardResource;
-use self::engine::focus::{Focus, FocusArrow};
+use self::engine::focus::{get_focus, set_focus, Focus, FocusArrow};
 use self::engine::input::{InputPlugin, MoveManipulatorEvent, SelectManipulatorEvent};
 use self::engine::{Assets, BoardCoordsHolder};
 use self::model::{Board, Border, Emitters, Manipulator, Particle, Tile, TileKind, Tint};
