@@ -10,9 +10,9 @@ use bevy::sprite::SpriteBundle;
 use bevy::transform::components::Transform;
 use strum::IntoEnumIterator;
 
-use crate::model::Border;
+use crate::model::{BoardCoords, Border};
 
-use super::BoardCoords;
+use super::{BoardCoordsHolder, EngineCoords};
 
 pub struct BorderAssets {
     textures: HashMap<Border, Handle<Image>>,
@@ -20,7 +20,7 @@ pub struct BorderAssets {
 
 #[derive(Bundle)]
 struct BorderBundle {
-    coords: BoardCoords,
+    coords: BoardCoordsHolder,
     sprite: SpriteBundle,
 }
 
@@ -67,6 +67,7 @@ impl BorderBundle {
         orientation: Orientation,
         assets: &BorderAssets,
     ) -> Self {
+        let coords = BoardCoordsHolder(coords);
         let texture = assets.textures[border].clone();
         Self {
             coords,

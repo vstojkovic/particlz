@@ -10,12 +10,12 @@ use bevy::sprite::{Anchor, Sprite, SpriteBundle};
 use bevy::transform::components::Transform;
 
 use crate::engine::{TILE_HEIGHT, TILE_WIDTH};
-use crate::model::{BeamTarget, BeamTargetKind, Board, Direction, Emitters};
+use crate::model::{BeamTarget, BeamTargetKind, Board, BoardCoords, Direction, Emitters};
 
 use super::animation::AnimationBundle;
 use super::board::BoardResource;
 use super::border::{BORDER_OFFSET_X, BORDER_OFFSET_Y};
-use super::BoardCoords;
+use super::BoardCoordsHolder;
 
 #[derive(Component, Debug)]
 pub struct Beam {
@@ -76,7 +76,7 @@ pub fn spawn_beams(
     ));
     beams.with_children(|beams| {
         for direction in emitters.directions() {
-            let target = board.find_beam_target(origin.row, origin.col, direction);
+            let target = board.find_beam_target(origin, direction);
             beams.spawn(BeamBundle::new(origin, direction, target));
         }
     });
@@ -86,7 +86,7 @@ pub fn retarget_beams(
     mut events: EventReader<RetargetBeams>,
     mut q_beam: Query<(Entity, &mut Beam, &mut Transform)>,
     q_parent: Query<&Parent>,
-    q_origin: Query<&BoardCoords>,
+    q_origin: Query<&BoardCoordsHolder>,
     board: Res<BoardResource>,
 ) {
     if events.is_empty() {
@@ -97,18 +97,17 @@ pub fn retarget_beams(
         let origin = q_parent
             .iter_ancestors(beam_id)
             .find_map(|id| q_origin.get(id).ok())
-            .unwrap();
-        let target = board
-            .model
-            .find_beam_target(origin.row, origin.col, beam.direction);
+            .unwrap()
+            .0;
+        let target = board.model.find_beam_target(origin, beam.direction);
         beam.target = target;
-        xform.scale = beam_scale(*origin, beam.direction, target).extend(1.0);
+        xform.scale = beam_scale(origin, beam.direction, target).extend(1.0);
     }
 }
 
 fn beam_scale(origin: BoardCoords, direction: Direction, target: BeamTarget) -> Vec2 {
-    let width = target.col.abs_diff(origin.col) as f32;
-    let height = target.row.abs_diff(origin.row) as f32;
+    let width = target.coords.col.abs_diff(origin.col) as f32;
+    let height = target.coords.row.abs_diff(origin.row) as f32;
     let scale = match direction {
         Direction::Up | Direction::Down => Vec2::new(4.0, height * TILE_HEIGHT),
         Direction::Left | Direction::Right => Vec2::new(width * TILE_WIDTH, 4.0),

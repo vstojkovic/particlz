@@ -9,9 +9,9 @@ use bevy::sprite::SpriteBundle;
 use bevy::transform::components::Transform;
 use strum::IntoEnumIterator;
 
-use crate::model::{Particle, Tint};
+use crate::model::{BoardCoords, Particle, Tint};
 
-use super::BoardCoords;
+use super::{BoardCoordsHolder, EngineCoords};
 
 pub struct ParticleAssets {
     textures: HashMap<Tint, Handle<Image>>,
@@ -19,7 +19,7 @@ pub struct ParticleAssets {
 
 #[derive(Bundle)]
 struct ParticleBundle {
-    coords: BoardCoords,
+    coords: BoardCoordsHolder,
     sprite: SpriteBundle,
 }
 
@@ -41,6 +41,7 @@ impl ParticleAssets {
 
 impl ParticleBundle {
     fn new(particle: &Particle, coords: BoardCoords, assets: &ParticleAssets) -> Self {
+        let coords = BoardCoordsHolder(coords);
         let texture = assets.textures[&particle.tint].clone();
         Self {
             coords,

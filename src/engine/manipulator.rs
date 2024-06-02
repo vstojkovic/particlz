@@ -11,11 +11,11 @@ use bevy::sprite::SpriteBundle;
 use bevy::transform::components::Transform;
 use strum::IntoEnumIterator;
 
-use crate::model::{Board, Emitters, Manipulator};
+use crate::model::{Board, BoardCoords, Emitters, Manipulator};
 
 use super::animation::{AnimationAnchorBundle, AnimationBundle};
 use super::beam::spawn_beams;
-use super::BoardCoords;
+use super::{BoardCoordsHolder, EngineCoords};
 
 pub struct ManipulatorAssets {
     textures: HashMap<Emitters, Handle<Image>>,
@@ -23,7 +23,7 @@ pub struct ManipulatorAssets {
 
 #[derive(Bundle)]
 struct ManipulatorAnchorBundle {
-    coords: BoardCoords,
+    coords: BoardCoordsHolder,
     spatial: SpatialBundle,
     animation: AnimationAnchorBundle,
 }
@@ -58,6 +58,7 @@ impl ManipulatorAssets {
 
 impl ManipulatorAnchorBundle {
     fn new(coords: BoardCoords) -> Self {
+        let coords = BoardCoordsHolder(coords);
         Self {
             coords,
             spatial: SpatialBundle {

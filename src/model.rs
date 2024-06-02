@@ -33,6 +33,12 @@ pub struct Board {
     pub pieces: Vec<Option<Piece>>,
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct BoardCoords {
+    pub row: usize,
+    pub col: usize,
+}
+
 pub struct Tile {
     pub kind: TileKind,
     pub tint: Tint,
@@ -82,8 +88,7 @@ pub enum Emitters {
 #[derive(Debug, Clone, Copy)]
 pub struct BeamTarget {
     pub kind: BeamTargetKind,
-    pub row: usize,
-    pub col: usize,
+    pub coords: BoardCoords,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -124,66 +129,70 @@ impl Board {
         pbc1::decode(code)
     }
 
-    pub fn get_tile(&self, row: usize, col: usize) -> Option<&Tile> {
-        self.tiles[row * self.cols + col].as_ref()
+    pub fn get_tile(&self, coords: BoardCoords) -> Option<&Tile> {
+        self.tiles[coords.row * self.cols + coords.col].as_ref()
     }
 
-    pub fn set_tile<T: Into<Option<Tile>>>(&mut self, row: usize, col: usize, tile: T) {
-        self.tiles[row * self.cols + col] = tile.into();
+    pub fn set_tile<T: Into<Option<Tile>>>(&mut self, coords: BoardCoords, tile: T) {
+        self.tiles[coords.row * self.cols + coords.col] = tile.into();
     }
 
-    pub fn get_horz_border(&self, row: usize, col: usize) -> Option<&Border> {
-        self.horz_borders[row * self.cols + col].as_ref()
+    pub fn get_horz_border(&self, coords: BoardCoords) -> Option<&Border> {
+        self.horz_borders[coords.row * self.cols + coords.col].as_ref()
     }
 
-    pub fn set_horz_border<B: Into<Option<Border>>>(&mut self, row: usize, col: usize, border: B) {
-        self.horz_borders[row * self.cols + col] = border.into();
+    pub fn set_horz_border<B: Into<Option<Border>>>(&mut self, coords: BoardCoords, border: B) {
+        self.horz_borders[coords.row * self.cols + coords.col] = border.into();
     }
 
-    pub fn get_vert_border(&self, row: usize, col: usize) -> Option<&Border> {
-        self.vert_borders[row * (self.cols + 1) + col].as_ref()
+    pub fn get_vert_border(&self, coords: BoardCoords) -> Option<&Border> {
+        self.vert_borders[coords.row * (self.cols + 1) + coords.col].as_ref()
     }
 
-    pub fn set_vert_border<B: Into<Option<Border>>>(&mut self, row: usize, col: usize, border: B) {
-        self.vert_borders[row * (self.cols + 1) + col] = border.into();
+    pub fn set_vert_border<B: Into<Option<Border>>>(&mut self, coords: BoardCoords, border: B) {
+        self.vert_borders[coords.row * (self.cols + 1) + coords.col] = border.into();
     }
 
-    pub fn get_piece(&self, row: usize, col: usize) -> Option<&Piece> {
-        self.pieces[row * self.cols + col].as_ref()
+    pub fn get_piece(&self, coords: BoardCoords) -> Option<&Piece> {
+        self.pieces[coords.row * self.cols + coords.col].as_ref()
     }
 
-    pub fn set_piece<T: Into<Option<Piece>>>(&mut self, row: usize, col: usize, piece: T) {
-        self.pieces[row * self.cols + col] = piece.into();
+    pub fn set_piece<T: Into<Option<Piece>>>(&mut self, coords: BoardCoords, piece: T) {
+        self.pieces[coords.row * self.cols + coords.col] = piece.into();
     }
 
-    pub fn take_piece(&mut self, row: usize, col: usize) -> Option<Piece> {
-        self.pieces[row * self.cols + col].take()
+    pub fn take_piece(&mut self, coords: BoardCoords) -> Option<Piece> {
+        self.pieces[coords.row * self.cols + coords.col].take()
     }
 
-    pub fn compute_allowed_moves(&self, row: usize, col: usize) -> EnumSet<Direction> {
+    pub fn compute_allowed_moves(&self, coords: BoardCoords) -> EnumSet<Direction> {
         let mut moves = EnumSet::empty();
 
-        if row > 0
-            && self.get_horz_border(row, col).is_none()
-            && self.get_piece(row - 1, col).is_none()
+        if coords.row > 0
+            && self.get_horz_border(coords).is_none()
+            && self.get_piece(coords.move_to(Direction::Up)).is_none()
         {
             moves.insert(Direction::Up);
         }
-        if col > 0
-            && self.get_vert_border(row, col).is_none()
-            && self.get_piece(row, col - 1).is_none()
+        if coords.col > 0
+            && self.get_vert_border(coords).is_none()
+            && self.get_piece(coords.move_to(Direction::Left)).is_none()
         {
             moves.insert(Direction::Left);
         }
-        if row < (self.rows - 1)
-            && self.get_horz_border(row + 1, col).is_none()
-            && self.get_piece(row + 1, col).is_none()
+        if coords.row < (self.rows - 1)
+            && self
+                .get_horz_border(coords.move_to(Direction::Down))
+                .is_none()
+            && self.get_piece(coords.move_to(Direction::Down)).is_none()
         {
             moves.insert(Direction::Down);
         }
-        if col < (self.cols - 1)
-            && self.get_vert_border(row, col + 1).is_none()
-            && self.get_piece(row, col + 1).is_none()
+        if coords.col < (self.cols - 1)
+            && self
+                .get_vert_border(coords.move_to(Direction::Right))
+                .is_none()
+            && self.get_piece(coords.move_to(Direction::Right)).is_none()
         {
             moves.insert(Direction::Right);
         }
@@ -191,39 +200,117 @@ impl Board {
         moves
     }
 
-    pub fn find_beam_target(&self, row: usize, col: usize, direction: Direction) -> BeamTarget {
-        let (row_delta, col_delta, mut border_row, mut border_col, get_border): (
+    pub fn prev_manipulator(&self, coords: Option<BoardCoords>) -> Option<BoardCoords> {
+        // NOTE: An active board should never have 0 manipulators
+        let mut coords = coords.unwrap_or_default();
+        let mut remaining = self.rows * self.cols;
+        while remaining > 0 {
+            if coords.col > 0 {
+                coords.col -= 1;
+            } else {
+                coords.col = self.cols - 1;
+                if coords.row > 0 {
+                    coords.row -= 1;
+                } else {
+                    coords.row = self.rows - 1;
+                }
+            }
+            if let Some(Piece::Manipulator(_)) = self.get_piece(coords) {
+                if !self.compute_allowed_moves(coords).is_empty() {
+                    return Some(coords);
+                }
+            }
+            remaining -= 1;
+        }
+        None
+    }
+
+    pub fn next_manipulator(&self, coords: Option<BoardCoords>) -> Option<BoardCoords> {
+        // NOTE: An active board should never have 0 manipulators
+        let max_row = self.rows - 1;
+        let max_col = self.cols - 1;
+        let mut coords = coords.unwrap_or_else(|| BoardCoords::new(max_row, max_col));
+        let mut remaining = self.rows * self.cols;
+        while remaining > 0 {
+            if coords.col < max_col {
+                coords.col += 1;
+            } else {
+                coords.col = 0;
+                if coords.row < max_row {
+                    coords.row += 1;
+                } else {
+                    coords.row = 0;
+                }
+            }
+            if let Some(Piece::Manipulator(_)) = self.get_piece(coords) {
+                if !self.compute_allowed_moves(coords).is_empty() {
+                    return Some(coords);
+                }
+            }
+            remaining -= 1;
+        }
+        None
+    }
+
+    pub fn find_beam_target(&self, coords: BoardCoords, direction: Direction) -> BeamTarget {
+        let (row_delta, col_delta, mut border_coords, get_border): (
             isize,
             isize,
-            usize,
-            usize,
-            fn(&Self, usize, usize) -> Option<&Border>,
+            BoardCoords,
+            fn(&Self, BoardCoords) -> Option<&Border>,
         ) = match direction {
-            Direction::Up => (-1, 0, row, col, Self::get_horz_border),
-            Direction::Left => (0, -1, row, col, Self::get_vert_border),
-            Direction::Down => (1, 0, row + 1, col, Self::get_horz_border),
-            Direction::Right => (0, 1, row, col + 1, Self::get_vert_border),
+            Direction::Up => (-1, 0, coords, Self::get_horz_border),
+            Direction::Left => (0, -1, coords, Self::get_vert_border),
+            Direction::Down => (1, 0, coords.move_to(Direction::Down), Self::get_horz_border),
+            Direction::Right => (
+                0,
+                1,
+                coords.move_to(Direction::Right),
+                Self::get_vert_border,
+            ),
         };
-        let (mut piece_row, mut piece_col) = (row, col);
+        let mut piece_coords = coords;
 
         loop {
-            if let Some(Border::Wall) = get_border(self, border_row, border_col) {
-                return BeamTarget::border(border_row, border_col);
+            if let Some(Border::Wall) = get_border(self, border_coords) {
+                return BeamTarget::border(border_coords);
             }
-            match border_row.checked_add_signed(row_delta) {
-                Some(row) if (row <= self.rows) => border_row = row,
-                _ => return BeamTarget::border(border_row, border_col),
+            match border_coords.row.checked_add_signed(row_delta) {
+                Some(row) if (row <= self.rows) => border_coords.row = row,
+                _ => return BeamTarget::border(border_coords),
             }
-            match border_col.checked_add_signed(col_delta) {
-                Some(col) if (col <= self.cols) => border_col = col,
-                _ => return BeamTarget::border(border_row, border_col),
+            match border_coords.col.checked_add_signed(col_delta) {
+                Some(col) if (col <= self.cols) => border_coords.col = col,
+                _ => return BeamTarget::border(border_coords),
             }
-            piece_row = piece_row.wrapping_add_signed(row_delta);
-            piece_col = piece_col.wrapping_add_signed(col_delta);
-            if self.get_piece(piece_row, piece_col).is_some() {
-                return BeamTarget::piece(piece_row, piece_col);
+            piece_coords.row = piece_coords.row.wrapping_add_signed(row_delta);
+            piece_coords.col = piece_coords.col.wrapping_add_signed(col_delta);
+            if self.get_piece(piece_coords).is_some() {
+                return BeamTarget::piece(piece_coords);
             }
         }
+    }
+}
+
+impl BoardCoords {
+    pub fn new(row: usize, col: usize) -> Self {
+        Self { row, col }
+    }
+
+    pub fn move_to(self, direction: Direction) -> Self {
+        match direction {
+            Direction::Up => (self.row - 1, self.col),
+            Direction::Left => (self.row, self.col - 1),
+            Direction::Down => (self.row + 1, self.col),
+            Direction::Right => (self.row, self.col + 1),
+        }
+        .into()
+    }
+}
+
+impl From<(usize, usize)> for BoardCoords {
+    fn from(value: (usize, usize)) -> Self {
+        Self::new(value.0, value.1)
     }
 }
 
@@ -264,19 +351,17 @@ impl Emitters {
 }
 
 impl BeamTarget {
-    pub fn border(row: usize, col: usize) -> Self {
+    pub fn border(coords: BoardCoords) -> Self {
         Self {
             kind: BeamTargetKind::Border,
-            row,
-            col,
+            coords,
         }
     }
 
-    pub fn piece(row: usize, col: usize) -> Self {
+    pub fn piece(coords: BoardCoords) -> Self {
         Self {
             kind: BeamTargetKind::Piece,
-            row,
-            col,
+            coords,
         }
     }
 }

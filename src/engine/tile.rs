@@ -9,9 +9,9 @@ use bevy::sprite::SpriteBundle;
 use bevy::transform::components::Transform;
 use strum::IntoEnumIterator;
 
-use crate::model::{Tile, TileKind, Tint};
+use crate::model::{BoardCoords, Tile, TileKind, Tint};
 
-use super::BoardCoords;
+use super::{BoardCoordsHolder, EngineCoords};
 
 pub struct TileAssets {
     textures: HashMap<(TileKind, Tint), Handle<Image>>,
@@ -19,7 +19,7 @@ pub struct TileAssets {
 
 #[derive(Bundle)]
 struct TileBundle {
-    coords: BoardCoords,
+    coords: BoardCoordsHolder,
     sprite: SpriteBundle,
 }
 
@@ -50,6 +50,7 @@ impl TileAssets {
 
 impl TileBundle {
     fn new(tile: &Tile, coords: BoardCoords, assets: &TileAssets) -> Self {
+        let coords = BoardCoordsHolder(coords);
         let texture = assets.textures[&(tile.kind, tile.tint)].clone();
         Self {
             coords,

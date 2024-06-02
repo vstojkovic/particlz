@@ -11,12 +11,12 @@ use bevy::render::camera::Camera;
 use bevy::transform::components::{GlobalTransform, Transform};
 use bevy::window::{PrimaryWindow, Window};
 
-use crate::model::Piece;
+use crate::model::{BoardCoords, Piece};
 
 use super::board::BoardResource;
 use super::focus::{focus_direction_for_offset, get_focus, Focus};
 use super::manipulator::is_offset_inside_manipulator;
-use super::{BoardCoords, Direction};
+use super::Direction;
 
 pub struct InputPlugin;
 
@@ -125,7 +125,7 @@ fn process_mouse_input(
                     return;
                 }
             }
-            if let Some(Piece::Manipulator(_)) = board.model.get_piece(coords.row, coords.col) {
+            if let Some(Piece::Manipulator(_)) = board.model.get_piece(coords) {
                 if is_offset_inside_manipulator(offset) {
                     ev_select_manipulator.send(SelectManipulatorEvent::AtCoords(coords));
                 }

@@ -15,7 +15,7 @@ pub mod manipulator;
 pub mod particle;
 pub mod tile;
 
-use crate::model::Direction;
+use crate::model::{BoardCoords, Direction};
 
 use self::border::BorderAssets;
 use self::focus::FocusAssets;
@@ -27,10 +27,7 @@ const TILE_WIDTH: f32 = 45.0;
 const TILE_HEIGHT: f32 = 45.0;
 
 #[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct BoardCoords {
-    pub row: usize,
-    pub col: usize,
-}
+pub struct BoardCoordsHolder(pub BoardCoords);
 
 #[derive(Resource)]
 pub struct Assets {
@@ -39,45 +36,6 @@ pub struct Assets {
     particles: ParticleAssets,
     manipulators: ManipulatorAssets,
     focus: FocusAssets,
-}
-
-impl BoardCoords {
-    pub fn new(row: usize, col: usize) -> Self {
-        Self { row, col }
-    }
-
-    pub fn move_to(self, direction: Direction) -> Self {
-        match direction {
-            Direction::Up => (self.row - 1, self.col),
-            Direction::Left => (self.row, self.col - 1),
-            Direction::Down => (self.row + 1, self.col),
-            Direction::Right => (self.row, self.col + 1),
-        }
-        .into()
-    }
-
-    fn from_xy(pos: Vec2) -> Option<Self> {
-        let pos = pos + Vec2::new(TILE_WIDTH, -TILE_HEIGHT) / 2.0;
-        if pos.x < 0.0 || pos.y > 0.0 {
-            return None;
-        }
-        let row = (-pos.y / TILE_HEIGHT).trunc() as usize;
-        let col = (pos.x / TILE_WIDTH).trunc() as usize;
-        Some(Self { row, col })
-    }
-
-    fn to_xy(&self) -> Vec2 {
-        Vec2 {
-            x: (self.col as f32) * TILE_WIDTH,
-            y: -(self.row as f32) * TILE_HEIGHT,
-        }
-    }
-}
-
-impl From<(usize, usize)> for BoardCoords {
-    fn from(value: (usize, usize)) -> Self {
-        Self::new(value.0, value.1)
-    }
 }
 
 impl Assets {
@@ -89,5 +47,39 @@ impl Assets {
             manipulators: ManipulatorAssets::load(server),
             focus: FocusAssets::load(server),
         }
+    }
+}
+
+trait EngineCoords: Sized {
+    fn from_xy(pos: Vec2) -> Option<Self>;
+    fn to_xy(self) -> Vec2;
+}
+
+impl EngineCoords for BoardCoords {
+    fn from_xy(pos: Vec2) -> Option<Self> {
+        let pos = pos + Vec2::new(TILE_WIDTH, -TILE_HEIGHT) / 2.0;
+        if pos.x < 0.0 || pos.y > 0.0 {
+            return None;
+        }
+        let row = (-pos.y / TILE_HEIGHT).trunc() as usize;
+        let col = (pos.x / TILE_WIDTH).trunc() as usize;
+        Some(Self::new(row, col))
+    }
+
+    fn to_xy(self) -> Vec2 {
+        Vec2 {
+            x: (self.col as f32) * TILE_WIDTH,
+            y: -(self.row as f32) * TILE_HEIGHT,
+        }
+    }
+}
+
+impl EngineCoords for BoardCoordsHolder {
+    fn from_xy(pos: Vec2) -> Option<Self> {
+        BoardCoords::from_xy(pos).map(|coords| Self(coords))
+    }
+
+    fn to_xy(self) -> Vec2 {
+        self.0.to_xy()
     }
 }

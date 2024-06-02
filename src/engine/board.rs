@@ -6,14 +6,14 @@ use bevy::math::Vec2;
 use bevy::prelude::SpatialBundle;
 use bevy::transform::components::Transform;
 
-use crate::model::{Board, Piece};
+use crate::model::{Board, BoardCoords, Piece};
 
 use super::border::{spawn_horz_border, spawn_vert_border};
 use super::focus::spawn_focus;
 use super::manipulator::spawn_manipulator;
 use super::particle::spawn_particle;
 use super::tile::spawn_tile;
-use super::{Assets, BoardCoords};
+use super::{Assets, BoardCoordsHolder, EngineCoords};
 
 #[derive(Resource)]
 pub struct BoardResource {
@@ -54,7 +54,7 @@ impl BoardResource {
                 for col in 0..self.model.cols {
                     self.tiles.push(
                         self.model
-                            .get_tile(row, col)
+                            .get_tile((row, col).into())
                             .map(|tile| spawn_tile(parent, tile, (row, col).into(), &assets.tiles)),
                     );
                 }
@@ -63,7 +63,7 @@ impl BoardResource {
             for row in 0..=self.model.rows {
                 for col in 0..self.model.cols {
                     self.horz_borders
-                        .push(self.model.get_horz_border(row, col).map(|border| {
+                        .push(self.model.get_horz_border((row, col).into()).map(|border| {
                             spawn_horz_border(parent, border, (row, col).into(), &assets.borders)
                         }));
                 }
@@ -72,7 +72,7 @@ impl BoardResource {
             for row in 0..self.model.rows {
                 for col in 0..=self.model.cols {
                     self.vert_borders
-                        .push(self.model.get_vert_border(row, col).map(|border| {
+                        .push(self.model.get_vert_border((row, col).into()).map(|border| {
                             spawn_vert_border(parent, border, (row, col).into(), &assets.borders)
                         }));
                 }
@@ -81,21 +81,25 @@ impl BoardResource {
             for row in 0..self.model.rows {
                 for col in 0..self.model.cols {
                     self.pieces
-                        .push(self.model.get_piece(row, col).map(|piece| match piece {
-                            Piece::Particle(particle) => spawn_particle(
-                                parent,
-                                particle,
-                                (row, col).into(),
-                                &assets.particles,
-                            ),
-                            Piece::Manipulator(manipulator) => spawn_manipulator(
-                                parent,
-                                manipulator,
-                                (row, col).into(),
-                                &self.model,
-                                &assets.manipulators,
-                            ),
-                        }));
+                        .push(
+                            self.model
+                                .get_piece((row, col).into())
+                                .map(|piece| match piece {
+                                    Piece::Particle(particle) => spawn_particle(
+                                        parent,
+                                        particle,
+                                        (row, col).into(),
+                                        &assets.particles,
+                                    ),
+                                    Piece::Manipulator(manipulator) => spawn_manipulator(
+                                        parent,
+                                        manipulator,
+                                        (row, col).into(),
+                                        &self.model,
+                                        &assets.manipulators,
+                                    ),
+                                }),
+                        );
                 }
             }
 
@@ -128,7 +132,7 @@ impl BoardResource {
         &mut self,
         from_coords: BoardCoords,
         to_coords: BoardCoords,
-        q_anchor: &mut Query<(&mut BoardCoords, &mut Transform)>,
+        q_anchor: &mut Query<(&mut BoardCoordsHolder, &mut Transform)>,
     ) {
         let from_idx = from_coords.row * self.model.cols + from_coords.col;
 
@@ -138,11 +142,11 @@ impl BoardResource {
         let to_idx = to_coords.row * self.model.cols + to_coords.col;
         self.pieces[to_idx] = Some(anchor);
 
-        let piece = self.model.take_piece(from_coords.row, from_coords.col);
-        self.model.set_piece(to_coords.row, to_coords.col, piece);
+        let piece = self.model.take_piece(from_coords);
+        self.model.set_piece(to_coords, piece);
 
         let (mut anchor_coords, mut anchor_xform) = q_anchor.get_mut(anchor).unwrap();
-        *anchor_coords = to_coords;
+        anchor_coords.0 = to_coords;
         anchor_xform.translation = to_coords.to_xy().extend(anchor_xform.translation.z);
     }
 }
