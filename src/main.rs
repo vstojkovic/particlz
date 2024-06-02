@@ -133,7 +133,7 @@ fn finish_animation(
             Animation::Movement(direction) => {
                 let (coords, _) = anchor.get_mut(event.anchor).unwrap();
                 let from_coords = coords.0;
-                let to_coords = from_coords.move_to(direction);
+                let to_coords = board.model.neighbor(from_coords, direction).unwrap();
                 board.move_piece(from_coords, to_coords, &mut anchor.transmute_lens().query());
                 set_focus(
                     Focus::Selected(to_coords, board.model.compute_allowed_moves(to_coords)),

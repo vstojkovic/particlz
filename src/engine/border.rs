@@ -10,7 +10,7 @@ use bevy::sprite::SpriteBundle;
 use bevy::transform::components::Transform;
 use strum::IntoEnumIterator;
 
-use crate::model::{BoardCoords, Border};
+use crate::model::{BoardCoords, Border, Orientation};
 
 use super::{BoardCoordsHolder, EngineCoords};
 
@@ -22,12 +22,6 @@ pub struct BorderAssets {
 struct BorderBundle {
     coords: BoardCoordsHolder,
     sprite: SpriteBundle,
-}
-
-#[derive(Debug, Clone, Copy)]
-enum Orientation {
-    Horizontal,
-    Vertical,
 }
 
 impl Orientation {

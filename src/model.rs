@@ -1,6 +1,7 @@
 //! Engine-agnostic game data and logic
 
 use enumset::{enum_set, EnumSet, EnumSetType};
+use strum::IntoEnumIterator;
 use strum_macros::{EnumCount, EnumIter, FromRepr};
 
 mod pbc1;
@@ -22,6 +23,12 @@ pub enum Direction {
     Left,
     Down,
     Right,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Orientation {
+    Horizontal,
+    Vertical,
 }
 
 pub struct Board {
@@ -129,6 +136,33 @@ impl Board {
         pbc1::decode(code)
     }
 
+    pub fn neighbor(&self, coords: BoardCoords, direction: Direction) -> Option<BoardCoords> {
+        match direction {
+            Direction::Up => coords
+                .row
+                .checked_add_signed(-1)
+                .map(|row| (row, coords.col).into()),
+            Direction::Left => coords
+                .col
+                .checked_add_signed(-1)
+                .map(|col| (coords.row, col).into()),
+            Direction::Down => Some(coords.row + 1)
+                .filter(|&row| row < self.rows)
+                .map(|row| (row, coords.col).into()),
+            Direction::Right => Some(coords.col + 1)
+                .filter(|&col| col < self.cols)
+                .map(|col| (coords.row, col).into()),
+        }
+    }
+
+    pub fn border_coords(&self, tile_coords: BoardCoords, direction: Direction) -> BoardCoords {
+        match direction {
+            Direction::Up | Direction::Left => tile_coords,
+            Direction::Down => (tile_coords.row + 1, tile_coords.col).into(),
+            Direction::Right => (tile_coords.row, tile_coords.col + 1).into(),
+        }
+    }
+
     pub fn get_tile(&self, coords: BoardCoords) -> Option<&Tile> {
         self.tiles[coords.row * self.cols + coords.col].as_ref()
     }
@@ -153,6 +187,13 @@ impl Board {
         self.vert_borders[coords.row * (self.cols + 1) + coords.col] = border.into();
     }
 
+    pub fn get_border(&self, orientation: Orientation, coords: BoardCoords) -> Option<&Border> {
+        match orientation {
+            Orientation::Horizontal => self.get_horz_border(coords),
+            Orientation::Vertical => self.get_vert_border(coords),
+        }
+    }
+
     pub fn get_piece(&self, coords: BoardCoords) -> Option<&Piece> {
         self.pieces[coords.row * self.cols + coords.col].as_ref()
     }
@@ -168,33 +209,17 @@ impl Board {
     pub fn compute_allowed_moves(&self, coords: BoardCoords) -> EnumSet<Direction> {
         let mut moves = EnumSet::empty();
 
-        if coords.row > 0
-            && self.get_horz_border(coords).is_none()
-            && self.get_piece(coords.move_to(Direction::Up)).is_none()
-        {
-            moves.insert(Direction::Up);
-        }
-        if coords.col > 0
-            && self.get_vert_border(coords).is_none()
-            && self.get_piece(coords.move_to(Direction::Left)).is_none()
-        {
-            moves.insert(Direction::Left);
-        }
-        if coords.row < (self.rows - 1)
-            && self
-                .get_horz_border(coords.move_to(Direction::Down))
-                .is_none()
-            && self.get_piece(coords.move_to(Direction::Down)).is_none()
-        {
-            moves.insert(Direction::Down);
-        }
-        if coords.col < (self.cols - 1)
-            && self
-                .get_vert_border(coords.move_to(Direction::Right))
-                .is_none()
-            && self.get_piece(coords.move_to(Direction::Right)).is_none()
-        {
-            moves.insert(Direction::Right);
+        for direction in Direction::iter() {
+            let Some(neighbor) = self.neighbor(coords, direction) else {
+                continue;
+            };
+            let border_coords = self.border_coords(coords, direction);
+            let border_orientation = direction.orientation().flip();
+            if self.get_piece(neighbor).is_none()
+                && self.get_border(border_orientation, border_coords).is_none()
+            {
+                moves.insert(direction);
+            }
         }
 
         moves
@@ -253,38 +278,18 @@ impl Board {
     }
 
     pub fn find_beam_target(&self, coords: BoardCoords, direction: Direction) -> BeamTarget {
-        let (row_delta, col_delta, mut border_coords, get_border): (
-            isize,
-            isize,
-            BoardCoords,
-            fn(&Self, BoardCoords) -> Option<&Border>,
-        ) = match direction {
-            Direction::Up => (-1, 0, coords, Self::get_horz_border),
-            Direction::Left => (0, -1, coords, Self::get_vert_border),
-            Direction::Down => (1, 0, coords.move_to(Direction::Down), Self::get_horz_border),
-            Direction::Right => (
-                0,
-                1,
-                coords.move_to(Direction::Right),
-                Self::get_vert_border,
-            ),
-        };
         let mut piece_coords = coords;
+        let border_orientation = direction.orientation().flip();
 
         loop {
-            if let Some(Border::Wall) = get_border(self, border_coords) {
+            let border_coords = self.border_coords(piece_coords, direction);
+            if let Some(Border::Wall) = self.get_border(border_orientation, border_coords) {
                 return BeamTarget::border(border_coords);
             }
-            match border_coords.row.checked_add_signed(row_delta) {
-                Some(row) if (row <= self.rows) => border_coords.row = row,
-                _ => return BeamTarget::border(border_coords),
-            }
-            match border_coords.col.checked_add_signed(col_delta) {
-                Some(col) if (col <= self.cols) => border_coords.col = col,
-                _ => return BeamTarget::border(border_coords),
-            }
-            piece_coords.row = piece_coords.row.wrapping_add_signed(row_delta);
-            piece_coords.col = piece_coords.col.wrapping_add_signed(col_delta);
+            piece_coords = match self.neighbor(piece_coords, direction) {
+                Some(neighbor) => neighbor,
+                None => return BeamTarget::border(border_coords),
+            };
             if self.get_piece(piece_coords).is_some() {
                 return BeamTarget::piece(piece_coords);
             }
@@ -292,19 +297,27 @@ impl Board {
     }
 }
 
+impl Direction {
+    pub fn orientation(self) -> Orientation {
+        match self {
+            Self::Up | Self::Down => Orientation::Vertical,
+            Self::Left | Self::Right => Orientation::Horizontal,
+        }
+    }
+}
+
+impl Orientation {
+    pub fn flip(self) -> Self {
+        match self {
+            Self::Horizontal => Self::Vertical,
+            Self::Vertical => Self::Horizontal,
+        }
+    }
+}
+
 impl BoardCoords {
     pub fn new(row: usize, col: usize) -> Self {
         Self { row, col }
-    }
-
-    pub fn move_to(self, direction: Direction) -> Self {
-        match direction {
-            Direction::Up => (self.row - 1, self.col),
-            Direction::Left => (self.row, self.col - 1),
-            Direction::Down => (self.row + 1, self.col),
-            Direction::Right => (self.row, self.col + 1),
-        }
-        .into()
     }
 }
 
