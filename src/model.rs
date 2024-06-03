@@ -241,9 +241,7 @@ impl Board {
                 }
             }
             if let Some(Piece::Manipulator(_)) = self.get_piece(coords) {
-                if !self.compute_allowed_moves(coords).is_empty() {
-                    return Some(coords);
-                }
+                return Some(coords);
             }
             remaining -= 1;
         }
@@ -268,9 +266,7 @@ impl Board {
                 }
             }
             if let Some(Piece::Manipulator(_)) = self.get_piece(coords) {
-                if !self.compute_allowed_moves(coords).is_empty() {
-                    return Some(coords);
-                }
+                return Some(coords);
             }
             remaining -= 1;
         }

@@ -3,10 +3,10 @@ use std::collections::HashMap;
 use bevy::asset::{AssetServer, Handle};
 use bevy::ecs::bundle::Bundle;
 use bevy::ecs::component::Component;
+use bevy::ecs::query::Without;
 use bevy::ecs::system::Query;
 use bevy::hierarchy::{BuildChildren, ChildBuilder, Children};
 use bevy::math::Vec2;
-use bevy::prelude::SpatialBundle;
 use bevy::render::texture::Image;
 use bevy::render::view::Visibility;
 use bevy::sprite::SpriteBundle;
@@ -25,23 +25,18 @@ pub enum Focus {
     Busy,
 }
 
-impl Default for Focus {
-    fn default() -> Self {
-        Self::None
-    }
-}
-
 #[derive(Component)]
 pub struct FocusArrow(Direction);
 
 pub struct FocusAssets {
-    textures: HashMap<Direction, Handle<Image>>,
+    texture: Handle<Image>,
+    arrow_textures: HashMap<Direction, Handle<Image>>,
 }
 
-#[derive(Bundle, Default)]
+#[derive(Bundle)]
 struct FocusBundle {
     focus: Focus,
-    spatial: SpatialBundle,
+    sprite: SpriteBundle,
 }
 
 #[derive(Bundle)]
@@ -61,7 +56,8 @@ impl Focus {
 
 impl FocusAssets {
     pub fn load(server: &AssetServer) -> Self {
-        let mut textures = HashMap::new();
+        let texture = server.load("focus.png");
+        let mut arrow_textures = HashMap::new();
         for direction in Direction::iter() {
             let path = match direction {
                 Direction::Up => "focus-u.png",
@@ -69,9 +65,25 @@ impl FocusAssets {
                 Direction::Down => "focus-d.png",
                 Direction::Right => "focus-r.png",
             };
-            textures.insert(direction, server.load(path));
+            arrow_textures.insert(direction, server.load(path));
         }
-        Self { textures }
+        Self {
+            texture,
+            arrow_textures,
+        }
+    }
+}
+
+impl FocusBundle {
+    fn new(assets: &FocusAssets) -> Self {
+        Self {
+            focus: Focus::None,
+            sprite: SpriteBundle {
+                texture: assets.texture.clone(),
+                visibility: Visibility::Hidden,
+                ..Default::default()
+            },
+        }
     }
 }
 
@@ -80,7 +92,7 @@ impl FocusArrowBundle {
         Self {
             arrow: FocusArrow(direction),
             sprite: SpriteBundle {
-                texture: assets.textures[&direction].clone(),
+                texture: assets.arrow_textures[&direction].clone(),
                 visibility: Visibility::Hidden,
                 transform: Transform {
                     translation: direction_offset(direction).extend(0.0),
@@ -93,7 +105,7 @@ impl FocusArrowBundle {
 }
 
 pub fn spawn_focus(parent: &mut ChildBuilder, assets: &FocusAssets) {
-    let mut focus = parent.spawn(FocusBundle::default());
+    let mut focus = parent.spawn(FocusBundle::new(assets));
     focus.with_children(|focus| {
         for direction in Direction::iter() {
             focus.spawn(FocusArrowBundle::new(direction, assets));
@@ -107,26 +119,22 @@ pub fn get_focus<'q>(query: &'q Query<&Focus>) -> &'q Focus {
 
 pub fn set_focus(
     value: Focus,
-    q_focus: &mut Query<(&mut Focus, &mut Transform, &Children)>,
-    q_arrow: &mut Query<(&FocusArrow, &mut Visibility)>,
+    q_focus: &mut Query<(&mut Focus, &mut Transform, &mut Visibility, &Children)>,
+    q_arrow: &mut Query<(&FocusArrow, &mut Visibility), Without<Focus>>,
 ) {
-    let (mut focus, mut xform, children) = q_focus.single_mut();
-    let (coords, directions) = match &value {
-        Focus::Selected(coords, directions) => (Some(coords), Some(directions)),
-        _ => (None, None),
-    };
-    if let Some(coords) = coords {
+    let (mut focus, mut xform, mut visibility, children) = q_focus.single_mut();
+    if let Focus::Selected(coords, directions) = &value {
         xform.translation = coords.to_xy().extend(Z_LAYER);
-    }
-    for &child in children {
-        let (arrow, mut child_visibility) = q_arrow.get_mut(child).unwrap();
-        let show = directions
-            .map(|directions| directions.contains(arrow.0))
-            .unwrap_or(false);
-        *child_visibility = match show {
-            false => Visibility::Hidden,
-            true => Visibility::Visible,
+        *visibility = Visibility::Inherited;
+        for &child in children {
+            let (arrow, mut child_visibility) = q_arrow.get_mut(child).unwrap();
+            *child_visibility = match directions.contains(arrow.0) {
+                false => Visibility::Hidden,
+                true => Visibility::Inherited,
+            }
         }
+    } else {
+        *visibility = Visibility::Hidden;
     }
     *focus = value;
 }

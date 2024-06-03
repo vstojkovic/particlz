@@ -64,28 +64,23 @@ fn setup_board(mut commands: Commands, mut board: ResMut<BoardResource>, assets:
 fn select_manipulator(
     mut events: EventReader<SelectManipulatorEvent>,
     board: Res<BoardResource>,
-    mut focus: Query<(&mut Focus, &mut Transform, &Children)>,
-    mut arrows: Query<(&FocusArrow, &mut Visibility)>,
+    mut focus: Query<(&mut Focus, &mut Transform, &mut Visibility, &Children)>,
+    mut arrows: Query<(&FocusArrow, &mut Visibility), Without<Focus>>,
 ) {
-    for event in events.read() {
-        let coords = get_focus(&focus.transmute_lens().query()).coords();
-        let coords = match event {
-            SelectManipulatorEvent::Previous => board.model.prev_manipulator(coords),
-            SelectManipulatorEvent::Next => board.model.next_manipulator(coords),
-            SelectManipulatorEvent::AtCoords(coords) => {
-                if !board.model.compute_allowed_moves(*coords).is_empty() {
-                    Some(*coords)
-                } else {
-                    None
-                }
-            }
-            SelectManipulatorEvent::Deselect => None,
-        };
-        let new_focus = coords
-            .map(|coords| Focus::Selected(coords, board.model.compute_allowed_moves(coords)))
-            .unwrap_or(Focus::None);
-        set_focus(new_focus, &mut focus, &mut arrows);
-    }
+    let Some(event) = events.read().last() else {
+        return;
+    };
+    let coords = get_focus(&focus.transmute_lens().query()).coords();
+    let coords = match event {
+        SelectManipulatorEvent::Previous => board.model.prev_manipulator(coords),
+        SelectManipulatorEvent::Next => board.model.next_manipulator(coords),
+        SelectManipulatorEvent::AtCoords(coords) => Some(*coords),
+        SelectManipulatorEvent::Deselect => None,
+    };
+    let new_focus = coords
+        .map(|coords| Focus::Selected(coords, board.model.compute_allowed_moves(coords)))
+        .unwrap_or(Focus::None);
+    set_focus(new_focus, &mut focus, &mut arrows);
 }
 
 fn move_manipulator(
@@ -93,19 +88,16 @@ fn move_manipulator(
     board: Res<BoardResource>,
     mut anchor: Query<(&mut Animation, &Children)>,
     mut animator: Query<&mut Animator<Transform>>,
-    mut focus: Query<(&mut Focus, &mut Transform, &Children)>,
-    mut arrows: Query<(&FocusArrow, &mut Visibility)>,
+    mut focus: Query<(&mut Focus, &mut Transform, &mut Visibility, &Children)>,
+    mut arrows: Query<(&FocusArrow, &mut Visibility), Without<Focus>>,
 ) {
-    if events.is_empty() {
-        return;
-    }
-    let Some(coords) = get_focus(&focus.transmute_lens().query()).coords() else {
-        for event in events.read() {
-            warn!("Received {:?} without a selected manipulator", event);
-        }
+    let Some(event) = events.read().last() else {
         return;
     };
-    let event = events.read().last().unwrap();
+    let Some(coords) = get_focus(&focus.transmute_lens().query()).coords() else {
+        warn!("Received {:?} without a selected manipulator", event);
+        return;
+    };
     let anchor_id = board.get_piece(coords).unwrap();
     set_animation(
         anchor_id,
@@ -120,8 +112,8 @@ fn finish_animation(
     mut ev_animation: EventReader<AnimationFinished>,
     mut ev_retarget: EventWriter<RetargetBeams>,
     mut anchor: Query<(&mut BoardCoordsHolder, &mut Transform), Without<Focus>>,
-    mut focus: Query<(&mut Focus, &mut Transform, &Children)>,
-    mut arrows: Query<(&FocusArrow, &mut Visibility)>,
+    mut focus: Query<(&mut Focus, &mut Transform, &mut Visibility, &Children)>,
+    mut arrows: Query<(&FocusArrow, &mut Visibility), Without<Focus>>,
     mut board: ResMut<BoardResource>,
 ) {
     if ev_animation.is_empty() {
