@@ -1,12 +1,15 @@
 use std::collections::HashMap;
 
+use bevy::app::Plugin;
 use bevy::asset::{AssetServer, Handle};
 use bevy::ecs::bundle::Bundle;
 use bevy::ecs::component::Component;
+use bevy::ecs::event::{Event, EventReader};
 use bevy::ecs::query::Without;
 use bevy::ecs::system::Query;
 use bevy::hierarchy::{BuildChildren, ChildBuilder, Children};
 use bevy::math::Vec2;
+use bevy::prelude::*;
 use bevy::render::texture::Image;
 use bevy::render::view::Visibility;
 use bevy::sprite::SpriteBundle;
@@ -18,12 +21,17 @@ use crate::model::{BoardCoords, Direction};
 
 use super::EngineCoords;
 
+pub struct FocusPlugin;
+
 #[derive(Component, Debug, Clone)]
 pub enum Focus {
     None,
     Selected(BoardCoords, EnumSet<Direction>),
     Busy,
 }
+
+#[derive(Event, Debug)]
+pub struct UpdateFocusEvent(pub Focus);
 
 #[derive(Component)]
 pub struct FocusArrow(Direction);
@@ -113,15 +121,19 @@ pub fn spawn_focus(parent: &mut ChildBuilder, assets: &FocusAssets) {
     });
 }
 
-pub fn get_focus<'q>(query: &'q Query<&Focus>) -> &'q Focus {
-    &*query.single()
+pub fn get_focus(query: Query<&Focus>) -> Focus {
+    query.single().clone()
 }
 
-pub fn set_focus(
-    value: Focus,
-    q_focus: &mut Query<(&mut Focus, &mut Transform, &mut Visibility, &Children)>,
-    q_arrow: &mut Query<(&FocusArrow, &mut Visibility), Without<Focus>>,
+pub fn update_focus(
+    mut events: EventReader<UpdateFocusEvent>,
+    mut q_focus: Query<(&mut Focus, &mut Transform, &mut Visibility, &Children)>,
+    mut q_arrow: Query<(&FocusArrow, &mut Visibility), Without<Focus>>,
 ) {
+    let Some(event) = events.read().last() else {
+        return;
+    };
+    let value = event.0.clone();
     let (mut focus, mut xform, mut visibility, children) = q_focus.single_mut();
     if let Focus::Selected(coords, directions) = &value {
         xform.translation = coords.to_xy().extend(Z_LAYER);
@@ -158,6 +170,13 @@ fn direction_offset(direction: Direction) -> Vec2 {
         Direction::Left => Vec2::new(-11.0, 0.0),
         Direction::Down => Vec2::new(0.0, -11.0),
         Direction::Right => Vec2::new(11.0, 0.0),
+    }
+}
+
+impl Plugin for FocusPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_event::<UpdateFocusEvent>()
+            .add_systems(FixedPostUpdate, update_focus);
     }
 }
 

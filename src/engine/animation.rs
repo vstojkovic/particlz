@@ -33,6 +33,12 @@ pub enum Animation {
 }
 
 #[derive(Event, Debug)]
+pub struct StartAnimation {
+    pub anchor: Entity,
+    pub animation: Animation,
+}
+
+#[derive(Event, Debug)]
 pub struct AnimationFinished {
     pub anchor: Entity,
     pub animation: Animation,
@@ -103,7 +109,7 @@ impl AnimationBundle {
     }
 }
 
-pub fn set_animation(
+fn set_animation(
     anchor: Entity,
     animation: Animation,
     q_anchor: &mut Query<(&mut Animation, &Children)>,
@@ -116,7 +122,17 @@ pub fn set_animation(
     }
 }
 
-fn animation_system(
+fn start_animation(
+    mut ev_start_animation: EventReader<StartAnimation>,
+    mut q_anchor: Query<(&mut Animation, &Children)>,
+    mut q_animator: Query<&mut Animator<Transform>>,
+) {
+    for StartAnimation { anchor, animation } in ev_start_animation.read() {
+        set_animation(*anchor, *animation, &mut q_anchor, &mut q_animator);
+    }
+}
+
+fn finish_animation(
     mut ev_tweens: EventReader<TweenCompleted>,
     mut ev_animation: EventWriter<AnimationFinished>,
     mut q_anchor: Query<(&mut Animation, &Children)>,
@@ -138,12 +154,14 @@ impl Plugin for AnimationPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         let tween_system = component_animator_system::<Transform>;
         app.add_event::<TweenCompleted>()
+            .add_event::<StartAnimation>()
             .add_event::<AnimationFinished>()
             .add_systems(
                 FixedUpdate,
                 (
-                    tween_system,
-                    animation_system.after(tween_system).in_set(AnimationSet),
+                    start_animation.in_set(AnimationSet),
+                    tween_system.after(start_animation),
+                    finish_animation.after(tween_system).in_set(AnimationSet),
                 ),
             );
     }

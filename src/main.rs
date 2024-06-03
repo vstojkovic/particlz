@@ -6,17 +6,16 @@ use bevy::ecs::system::{Commands, Res, ResMut};
 use bevy::prelude::*;
 use bevy::window::{Window, WindowPlugin};
 use bevy::DefaultPlugins;
-use bevy_tweening::Animator;
 
 mod engine;
 mod model;
 
 use self::engine::animation::{
-    set_animation, Animation, AnimationFinished, AnimationPlugin, AnimationSet,
+    Animation, AnimationFinished, AnimationPlugin, AnimationSet, StartAnimation,
 };
-use self::engine::beam::{retarget_beams, RetargetBeams};
+use self::engine::beam::{BeamPlugin, RetargetBeams};
 use self::engine::board::BoardResource;
-use self::engine::focus::{get_focus, set_focus, Focus, FocusArrow};
+use self::engine::focus::{get_focus, Focus, FocusPlugin, UpdateFocusEvent};
 use self::engine::input::{InputPlugin, MoveManipulatorEvent, SelectManipulatorEvent};
 use self::engine::{Assets, BoardCoordsHolder};
 use self::model::{Board, Border, Emitters, Manipulator, Particle, Tile, TileKind, Tint};
@@ -37,16 +36,16 @@ fn main() {
         }))
         .add_plugins(InputPlugin)
         .add_plugins(AnimationPlugin)
-        .add_event::<RetargetBeams>()
+        .add_plugins(FocusPlugin)
+        .add_plugins(BeamPlugin)
         .insert_resource(BoardResource::new(board))
         .add_systems(Startup, (load_assets, setup_board).chain())
         .add_systems(
             FixedUpdate,
             (
-                select_manipulator,
-                move_manipulator,
-                finish_animation.after(AnimationSet),
-                retarget_beams.after(finish_animation),
+                get_focus.pipe(select_manipulator),
+                get_focus.pipe(move_manipulator).before(AnimationSet),
+                finish_move.after(AnimationSet),
             ),
         )
         .run();
@@ -62,15 +61,15 @@ fn setup_board(mut commands: Commands, mut board: ResMut<BoardResource>, assets:
 }
 
 fn select_manipulator(
-    mut events: EventReader<SelectManipulatorEvent>,
+    focus: In<Focus>,
+    mut ev_select_manipulator: EventReader<SelectManipulatorEvent>,
+    mut ev_update_focus: EventWriter<UpdateFocusEvent>,
     board: Res<BoardResource>,
-    mut focus: Query<(&mut Focus, &mut Transform, &mut Visibility, &Children)>,
-    mut arrows: Query<(&FocusArrow, &mut Visibility), Without<Focus>>,
 ) {
-    let Some(event) = events.read().last() else {
+    let Some(event) = ev_select_manipulator.read().last() else {
         return;
     };
-    let coords = get_focus(&focus.transmute_lens().query()).coords();
+    let coords = focus.coords();
     let coords = match event {
         SelectManipulatorEvent::Previous => board.model.prev_manipulator(coords),
         SelectManipulatorEvent::Next => board.model.next_manipulator(coords),
@@ -80,41 +79,37 @@ fn select_manipulator(
     let new_focus = coords
         .map(|coords| Focus::Selected(coords, board.model.compute_allowed_moves(coords)))
         .unwrap_or(Focus::None);
-    set_focus(new_focus, &mut focus, &mut arrows);
+    ev_update_focus.send(UpdateFocusEvent(new_focus));
 }
 
 fn move_manipulator(
-    mut events: EventReader<MoveManipulatorEvent>,
+    focus: In<Focus>,
+    mut ev_move_manipulator: EventReader<MoveManipulatorEvent>,
+    mut ev_start_animation: EventWriter<StartAnimation>,
+    mut ev_update_focus: EventWriter<UpdateFocusEvent>,
     board: Res<BoardResource>,
-    mut anchor: Query<(&mut Animation, &Children)>,
-    mut animator: Query<&mut Animator<Transform>>,
-    mut focus: Query<(&mut Focus, &mut Transform, &mut Visibility, &Children)>,
-    mut arrows: Query<(&FocusArrow, &mut Visibility), Without<Focus>>,
 ) {
-    let Some(event) = events.read().last() else {
+    let Some(event) = ev_move_manipulator.read().last() else {
         return;
     };
-    let Some(coords) = get_focus(&focus.transmute_lens().query()).coords() else {
+    let Some(coords) = focus.coords() else {
         warn!("Received {:?} without a selected manipulator", event);
         return;
     };
     let anchor_id = board.get_piece(coords).unwrap();
-    set_animation(
-        anchor_id,
-        Animation::Movement(event.0),
-        &mut anchor,
-        &mut animator,
-    );
-    set_focus(Focus::Busy, &mut focus, &mut arrows);
+    ev_start_animation.send(StartAnimation {
+        anchor: anchor_id,
+        animation: Animation::Movement(event.0),
+    });
+    ev_update_focus.send(UpdateFocusEvent(Focus::Busy));
 }
 
-fn finish_animation(
+fn finish_move(
     mut ev_animation: EventReader<AnimationFinished>,
     mut ev_retarget: EventWriter<RetargetBeams>,
-    mut anchor: Query<(&mut BoardCoordsHolder, &mut Transform), Without<Focus>>,
-    mut focus: Query<(&mut Focus, &mut Transform, &mut Visibility, &Children)>,
-    mut arrows: Query<(&FocusArrow, &mut Visibility), Without<Focus>>,
+    mut ev_update_focus: EventWriter<UpdateFocusEvent>,
     mut board: ResMut<BoardResource>,
+    mut anchor: Query<(&mut BoardCoordsHolder, &mut Transform), Without<Focus>>,
 ) {
     if ev_animation.is_empty() {
         return;
@@ -127,11 +122,10 @@ fn finish_animation(
                 let from_coords = coords.0;
                 let to_coords = board.model.neighbor(from_coords, direction).unwrap();
                 board.move_piece(from_coords, to_coords, &mut anchor.transmute_lens().query());
-                set_focus(
-                    Focus::Selected(to_coords, board.model.compute_allowed_moves(to_coords)),
-                    &mut focus,
-                    &mut arrows,
-                );
+                ev_update_focus.send(UpdateFocusEvent(Focus::Selected(
+                    to_coords,
+                    board.model.compute_allowed_moves(to_coords),
+                )));
             }
         }
     }

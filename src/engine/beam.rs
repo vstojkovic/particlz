@@ -1,3 +1,4 @@
+use bevy::app::{FixedPostUpdate, Plugin};
 use bevy::ecs::bundle::Bundle;
 use bevy::ecs::component::Component;
 use bevy::ecs::entity::Entity;
@@ -17,6 +18,7 @@ use super::board::BoardResource;
 use super::border::{BORDER_OFFSET_X, BORDER_OFFSET_Y};
 use super::BoardCoordsHolder;
 
+pub struct BeamPlugin;
 #[derive(Component, Debug)]
 pub struct Beam {
     direction: Direction,
@@ -82,7 +84,7 @@ pub fn spawn_beams(
     });
 }
 
-pub fn retarget_beams(
+fn retarget_beams(
     mut events: EventReader<RetargetBeams>,
     mut q_beam: Query<(Entity, &mut Beam, &mut Transform)>,
     q_parent: Query<&Parent>,
@@ -123,6 +125,13 @@ fn beam_scale(origin: BoardCoords, direction: Direction, target: BeamTarget) -> 
                     Direction::Right => Vec2::new(-BORDER_OFFSET_X, 0.0),
                 }
         }
+    }
+}
+
+impl Plugin for BeamPlugin {
+    fn build(&self, app: &mut bevy::prelude::App) {
+        app.add_event::<RetargetBeams>()
+            .add_systems(FixedPostUpdate, retarget_beams);
     }
 }
 

@@ -34,9 +34,9 @@ pub enum SelectManipulatorEvent {
 pub struct MoveManipulatorEvent(pub Direction);
 
 fn process_keyboard_input(
+    In(focus): In<Focus>,
     mut keyboard_events: EventReader<KeyboardInput>,
     mut keyboard_input: Local<ButtonInput<KeyCode>>,
-    q_focus: Query<&Focus>,
     mut ev_select_manipulator: EventWriter<SelectManipulatorEvent>,
     mut ev_move_manipulator: EventWriter<MoveManipulatorEvent>,
 ) {
@@ -48,7 +48,6 @@ fn process_keyboard_input(
         }
     }
 
-    let focus = get_focus(&q_focus);
     if let Focus::Busy = focus {
         return;
     }
@@ -83,9 +82,9 @@ fn process_keyboard_input(
 }
 
 fn process_mouse_input(
+    In(focus): In<Focus>,
     mut mouse_events: EventReader<MouseButtonInput>,
     mut mouse_input: Local<ButtonInput<MouseButton>>,
-    q_focus: Query<&Focus>,
     window: Query<&Window, With<PrimaryWindow>>,
     camera: Query<(&Camera, &GlobalTransform)>,
     board: Res<BoardResource>,
@@ -101,7 +100,6 @@ fn process_mouse_input(
         }
     }
 
-    let focus = get_focus(&q_focus);
     if let Focus::Busy = focus {
         return;
     }
@@ -115,7 +113,7 @@ fn process_mouse_input(
             .and_then(|pos| board.coords_at_pos(pos, &q_xform));
         if let Some((coords, offset)) = coords_and_offset {
             if let Focus::Selected(focus_coords, directions) = focus {
-                if coords == *focus_coords {
+                if coords == focus_coords {
                     if let Some(direction) = focus_direction_for_offset(offset) {
                         if directions.contains(direction) {
                             ev_move_manipulator.send(MoveManipulatorEvent(direction));
@@ -141,7 +139,11 @@ impl Plugin for InputPlugin {
             .add_event::<MoveManipulatorEvent>()
             .add_systems(
                 FixedPreUpdate,
-                (process_keyboard_input, process_mouse_input).in_set(InputSet),
+                (
+                    get_focus.pipe(process_keyboard_input),
+                    get_focus.pipe(process_mouse_input),
+                )
+                    .in_set(InputSet),
             );
     }
 }
