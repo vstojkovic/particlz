@@ -6,6 +6,7 @@ use bevy::ecs::system::{Commands, Res, ResMut};
 use bevy::prelude::*;
 use bevy::window::{Window, WindowPlugin};
 use bevy::DefaultPlugins;
+use engine::beam::BeamSet;
 
 mod engine;
 mod model;
@@ -13,7 +14,7 @@ mod model;
 use self::engine::animation::{
     Animation, AnimationFinished, AnimationPlugin, AnimationSet, StartAnimation,
 };
-use self::engine::beam::{BeamPlugin, RetargetBeams};
+use self::engine::beam::{BeamPlugin, MoveBeams, RetargetBeams};
 use self::engine::board::BoardResource;
 use self::engine::focus::{get_focus, Focus, FocusPlugin, UpdateFocusEvent};
 use self::engine::input::{InputPlugin, MoveManipulatorEvent, SelectManipulatorEvent};
@@ -44,7 +45,10 @@ fn main() {
             FixedUpdate,
             (
                 get_focus.pipe(select_manipulator),
-                get_focus.pipe(move_manipulator).before(AnimationSet),
+                get_focus
+                    .pipe(move_manipulator)
+                    .before(AnimationSet)
+                    .before(BeamSet),
                 finish_move.after(AnimationSet),
             ),
         )
@@ -86,6 +90,7 @@ fn move_manipulator(
     focus: In<Focus>,
     mut ev_move_manipulator: EventReader<MoveManipulatorEvent>,
     mut ev_start_animation: EventWriter<StartAnimation>,
+    mut ev_move_beams: EventWriter<MoveBeams>,
     mut ev_update_focus: EventWriter<UpdateFocusEvent>,
     board: Res<BoardResource>,
 ) {
@@ -100,6 +105,10 @@ fn move_manipulator(
     ev_start_animation.send(StartAnimation {
         anchor: anchor_id,
         animation: Animation::Movement(event.0),
+    });
+    ev_move_beams.send(MoveBeams {
+        anchor: anchor_id,
+        direction: event.0,
     });
     ev_update_focus.send(UpdateFocusEvent(Focus::Busy));
 }

@@ -1,17 +1,24 @@
-use bevy::app::{FixedPostUpdate, Plugin};
+use std::time::Duration;
+
+use bevy::app::{FixedPostUpdate, FixedUpdate, Plugin};
 use bevy::ecs::bundle::Bundle;
 use bevy::ecs::component::Component;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::event::{Event, EventReader};
+use bevy::ecs::schedule::{IntoSystemConfigs, SystemSet};
 use bevy::ecs::system::{Query, Res};
-use bevy::hierarchy::{BuildChildren, ChildBuilder, HierarchyQueryExt, Parent};
+use bevy::hierarchy::{BuildChildren, ChildBuilder, Children, HierarchyQueryExt, Parent};
 use bevy::math::Vec2;
 use bevy::prelude::SpatialBundle;
 use bevy::sprite::{Anchor, Sprite, SpriteBundle};
 use bevy::transform::components::Transform;
+use bevy_tweening::lens::TransformScaleLens;
+use bevy_tweening::{Animator, AnimatorState, Delay, EaseFunction, Tween};
 
 use crate::engine::{TILE_HEIGHT, TILE_WIDTH};
-use crate::model::{BeamTarget, BeamTargetKind, Board, BoardCoords, Direction, Emitters};
+use crate::model::{
+    BeamTarget, BeamTargetKind, Board, BoardCoords, Direction, Emitters, Orientation,
+};
 
 use super::animation::AnimationBundle;
 use super::board::BoardResource;
@@ -19,6 +26,10 @@ use super::border::{BORDER_OFFSET_X, BORDER_OFFSET_Y};
 use super::BoardCoordsHolder;
 
 pub struct BeamPlugin;
+
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct BeamSet;
+
 #[derive(Component, Debug)]
 pub struct Beam {
     direction: Direction,
@@ -29,6 +40,13 @@ pub struct Beam {
 pub struct BeamBundle {
     beam: Beam,
     sprite: SpriteBundle,
+    xform_animator: Animator<Transform>,
+}
+
+#[derive(Event)]
+pub struct MoveBeams {
+    pub anchor: Entity,
+    pub direction: Direction,
 }
 
 #[derive(Event)]
@@ -42,6 +60,9 @@ impl BeamBundle {
             Direction::Down => Anchor::TopCenter,
             Direction::Right => Anchor::CenterLeft,
         };
+        let tween = Delay::new(Duration::from_nanos(1));
+        let mut xform_animator = Animator::new(tween);
+        xform_animator.state = AnimatorState::Paused;
         Self {
             beam: Beam { direction, target },
             sprite: SpriteBundle {
@@ -56,6 +77,7 @@ impl BeamBundle {
                 },
                 ..Default::default()
             },
+            xform_animator,
         }
     }
 }
@@ -82,6 +104,42 @@ pub fn spawn_beams(
             beams.spawn(BeamBundle::new(origin, direction, target));
         }
     });
+}
+
+fn move_beams(
+    mut events: EventReader<MoveBeams>,
+    q_children: Query<&Children>,
+    mut q_beam: Query<(&mut Beam, &mut Transform, &mut Animator<Transform>)>,
+) {
+    for event in events.read() {
+        for child in q_children.iter_descendants(event.anchor) {
+            let Ok((beam, xform, mut xform_animator)) = q_beam.get_mut(child) else {
+                continue;
+            };
+            if beam.direction.orientation() != event.direction.orientation() {
+                continue;
+            }
+            let mut delta = match event.direction.orientation() {
+                Orientation::Horizontal => Vec2::new(TILE_WIDTH, 0.0),
+                Orientation::Vertical => Vec2::new(0.0, TILE_HEIGHT),
+            };
+            if beam.direction == event.direction {
+                delta = -delta;
+            }
+            let start = xform.scale.truncate();
+            let end = start + delta;
+            let tween = Tween::new(
+                EaseFunction::SineInOut,
+                Duration::from_millis(500),
+                TransformScaleLens {
+                    start: start.extend(1.0),
+                    end: end.extend(1.0),
+                },
+            );
+            xform_animator.set_tweenable(tween);
+            xform_animator.state = AnimatorState::Playing;
+        }
+    }
 }
 
 fn retarget_beams(
@@ -130,8 +188,10 @@ fn beam_scale(origin: BoardCoords, direction: Direction, target: BeamTarget) -> 
 
 impl Plugin for BeamPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
-        app.add_event::<RetargetBeams>()
-            .add_systems(FixedPostUpdate, retarget_beams);
+        app.add_event::<MoveBeams>()
+            .add_event::<RetargetBeams>()
+            .add_systems(FixedUpdate, move_beams.in_set(BeamSet))
+            .add_systems(FixedPostUpdate, retarget_beams.in_set(BeamSet));
     }
 }
 
