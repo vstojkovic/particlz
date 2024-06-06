@@ -31,6 +31,7 @@ pub enum Orientation {
     Vertical,
 }
 
+#[derive(Clone)]
 pub struct Board {
     pub rows: usize,
     pub cols: usize,
@@ -46,6 +47,7 @@ pub struct BoardCoords {
     pub col: usize,
 }
 
+#[derive(Debug, Clone)]
 pub struct Tile {
     pub kind: TileKind,
     pub tint: Tint,
@@ -64,15 +66,18 @@ pub enum Border {
     Window,
 }
 
+#[derive(Debug, Clone)]
 pub enum Piece {
     Particle(Particle),
     Manipulator(Manipulator),
 }
 
+#[derive(Debug, Clone)]
 pub struct Particle {
     pub tint: Tint,
 }
 
+#[derive(Debug, Clone)]
 pub struct Manipulator {
     pub emitters: Emitters,
 }
@@ -134,6 +139,23 @@ impl Board {
 
     pub fn from_pbc1(code: &str) -> Result<Self, Pbc1DecodeError> {
         pbc1::decode(code)
+    }
+
+    pub fn copy_state_from(&mut self, other: &Self) {
+        assert_eq!(self.rows, other.rows);
+        assert_eq!(self.cols, other.cols);
+
+        self.tiles.clear();
+        self.tiles.extend_from_slice(&other.tiles);
+
+        self.horz_borders.clear();
+        self.horz_borders.extend_from_slice(&other.horz_borders);
+
+        self.vert_borders.clear();
+        self.vert_borders.extend_from_slice(&other.vert_borders);
+
+        self.pieces.clear();
+        self.pieces.extend_from_slice(&other.pieces);
     }
 
     pub fn neighbor(&self, coords: BoardCoords, direction: Direction) -> Option<BoardCoords> {
@@ -202,8 +224,22 @@ impl Board {
         self.pieces[coords.row * self.cols + coords.col] = piece.into();
     }
 
-    pub fn take_piece(&mut self, coords: BoardCoords) -> Option<Piece> {
-        self.pieces[coords.row * self.cols + coords.col].take()
+    pub fn move_piece(&mut self, from_coords: BoardCoords, to_coords: BoardCoords) {
+        let from_idx = from_coords.row * self.cols + from_coords.col;
+        let to_idx = to_coords.row * self.cols + to_coords.col;
+        self.pieces[to_idx] = self.pieces[from_idx].take();
+    }
+
+    pub fn iter_pieces(&self) -> impl Iterator<Item = (BoardCoords, &Piece)> {
+        self.pieces
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, opt)| Some((idx, opt.as_ref()?)))
+            .map(|(idx, piece)| {
+                let row = idx / self.cols;
+                let col = idx % self.cols;
+                (BoardCoords::new(row, col), piece)
+            })
     }
 
     pub fn compute_allowed_moves(&self, coords: BoardCoords) -> EnumSet<Direction> {

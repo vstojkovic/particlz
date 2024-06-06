@@ -9,6 +9,7 @@ use bevy::ecs::schedule::{IntoSystemConfigs, SystemSet};
 use bevy::ecs::system::Query;
 use bevy::hierarchy::Children;
 use bevy::math::Vec2;
+use bevy::sprite::Sprite;
 use bevy::transform::components::Transform;
 use bevy_tweening::lens::TransformPositionLens;
 use bevy_tweening::{
@@ -19,7 +20,7 @@ use strum::{EnumCount, IntoEnumIterator};
 
 use crate::model::Direction;
 
-use super::{TILE_HEIGHT, TILE_WIDTH};
+use super::{MOVE_DURATION, TILE_HEIGHT, TILE_WIDTH};
 
 pub struct AnimationPlugin;
 
@@ -60,7 +61,7 @@ impl Animation {
         match self {
             Self::Idle => tweenable.set_progress(1.0),
             Self::Movement(direction) => {
-                tweenable.set_elapsed(Duration::from_millis(500 * direction as isize as u64))
+                tweenable.set_elapsed(MOVE_DURATION * (direction as isize as u32))
             }
         }
     }
@@ -86,7 +87,7 @@ impl AnimationBundle {
             };
             let tween = Tween::new(
                 EaseFunction::SineInOut,
-                Duration::from_millis(500),
+                MOVE_DURATION,
                 TransformPositionLens {
                     start: Vec2::ZERO.extend(z),
                     end: end.extend(z),
@@ -152,7 +153,8 @@ fn finish_animation(
 
 impl Plugin for AnimationPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
-        let tween_system = component_animator_system::<Transform>;
+        let xform_tween_system = component_animator_system::<Transform>;
+        let alpha_tween_system = component_animator_system::<Sprite>; // TODO: This should go into beam mod
         app.add_event::<TweenCompleted>()
             .add_event::<StartAnimation>()
             .add_event::<AnimationFinished>()
@@ -160,8 +162,11 @@ impl Plugin for AnimationPlugin {
                 FixedUpdate,
                 (
                     start_animation.in_set(AnimationSet),
-                    tween_system.after(start_animation),
-                    finish_animation.after(tween_system).in_set(AnimationSet),
+                    xform_tween_system.after(start_animation),
+                    alpha_tween_system,
+                    finish_animation
+                        .after(xform_tween_system)
+                        .in_set(AnimationSet),
                 ),
             );
     }

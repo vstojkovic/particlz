@@ -1,5 +1,7 @@
 //! Engine-specific game data and logic
 
+use std::time::Duration;
+
 use bevy::asset::AssetServer;
 use bevy::ecs::component::Component;
 use bevy::ecs::system::Resource;
@@ -25,6 +27,7 @@ use self::tile::TileAssets;
 
 const TILE_WIDTH: f32 = 45.0;
 const TILE_HEIGHT: f32 = 45.0;
+const MOVE_DURATION: Duration = Duration::from_millis(500);
 
 #[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct BoardCoordsHolder(pub BoardCoords);

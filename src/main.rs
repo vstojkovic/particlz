@@ -14,7 +14,7 @@ mod model;
 use self::engine::animation::{
     Animation, AnimationFinished, AnimationPlugin, AnimationSet, StartAnimation,
 };
-use self::engine::beam::{BeamPlugin, MoveBeams, RetargetBeams};
+use self::engine::beam::{BeamPlugin, MoveBeams, ResetBeams};
 use self::engine::board::BoardResource;
 use self::engine::focus::{get_focus, Focus, FocusPlugin, UpdateFocusEvent};
 use self::engine::input::{InputPlugin, MoveManipulatorEvent, SelectManipulatorEvent};
@@ -75,13 +75,13 @@ fn select_manipulator(
     };
     let coords = focus.coords();
     let coords = match event {
-        SelectManipulatorEvent::Previous => board.model.prev_manipulator(coords),
-        SelectManipulatorEvent::Next => board.model.next_manipulator(coords),
+        SelectManipulatorEvent::Previous => board.present.prev_manipulator(coords),
+        SelectManipulatorEvent::Next => board.present.next_manipulator(coords),
         SelectManipulatorEvent::AtCoords(coords) => Some(*coords),
         SelectManipulatorEvent::Deselect => None,
     };
     let new_focus = coords
-        .map(|coords| Focus::Selected(coords, board.model.compute_allowed_moves(coords)))
+        .map(|coords| Focus::Selected(coords, board.present.compute_allowed_moves(coords)))
         .unwrap_or(Focus::None);
     ev_update_focus.send(UpdateFocusEvent(new_focus));
 }
@@ -92,7 +92,7 @@ fn move_manipulator(
     mut ev_start_animation: EventWriter<StartAnimation>,
     mut ev_move_beams: EventWriter<MoveBeams>,
     mut ev_update_focus: EventWriter<UpdateFocusEvent>,
-    board: Res<BoardResource>,
+    mut board: ResMut<BoardResource>,
 ) {
     let Some(event) = ev_move_manipulator.read().last() else {
         return;
@@ -101,21 +101,27 @@ fn move_manipulator(
         warn!("Received {:?} without a selected manipulator", event);
         return;
     };
+
+    let direction = event.0;
+
+    let to_coords = board.present.neighbor(coords, direction).unwrap();
+    board.future.move_piece(coords, to_coords);
+
     let anchor_id = board.get_piece(coords).unwrap();
     ev_start_animation.send(StartAnimation {
         anchor: anchor_id,
-        animation: Animation::Movement(event.0),
+        animation: Animation::Movement(direction),
     });
     ev_move_beams.send(MoveBeams {
         anchor: anchor_id,
-        direction: event.0,
+        direction,
     });
     ev_update_focus.send(UpdateFocusEvent(Focus::Busy));
 }
 
 fn finish_move(
     mut ev_animation: EventReader<AnimationFinished>,
-    mut ev_retarget: EventWriter<RetargetBeams>,
+    mut ev_retarget: EventWriter<ResetBeams>,
     mut ev_update_focus: EventWriter<UpdateFocusEvent>,
     mut board: ResMut<BoardResource>,
     mut anchor: Query<(&mut BoardCoordsHolder, &mut Transform), Without<Focus>>,
@@ -123,22 +129,25 @@ fn finish_move(
     if ev_animation.is_empty() {
         return;
     }
+
+    board.update_present();
+
     for event in ev_animation.read() {
         match event.animation {
             Animation::Idle => unreachable!(),
             Animation::Movement(direction) => {
                 let (coords, _) = anchor.get_mut(event.anchor).unwrap();
                 let from_coords = coords.0;
-                let to_coords = board.model.neighbor(from_coords, direction).unwrap();
+                let to_coords = board.present.neighbor(from_coords, direction).unwrap();
                 board.move_piece(from_coords, to_coords, &mut anchor.transmute_lens().query());
                 ev_update_focus.send(UpdateFocusEvent(Focus::Selected(
                     to_coords,
-                    board.model.compute_allowed_moves(to_coords),
+                    board.present.compute_allowed_moves(to_coords),
                 )));
             }
         }
     }
-    ev_retarget.send(RetargetBeams);
+    ev_retarget.send(ResetBeams);
 }
 
 fn make_test_board() -> Board {

@@ -122,7 +122,7 @@ fn process_mouse_input(
                     return;
                 }
             }
-            if let Some(Piece::Manipulator(_)) = board.model.get_piece(coords) {
+            if let Some(Piece::Manipulator(_)) = board.present.get_piece(coords) {
                 if is_offset_inside_manipulator(offset) {
                     ev_select_manipulator.send(SelectManipulatorEvent::AtCoords(coords));
                 }
