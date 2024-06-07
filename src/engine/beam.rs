@@ -196,8 +196,14 @@ fn move_beams(
             true => board.present.neighbor(coords, event.direction).unwrap(),
         };
         for child in q_children.iter_descendants(anchor) {
-            let Ok((mut beam, mut xform, mut visibility, mut sprite, mut xform_animator, mut alpha_animator)) =
-                q_beam.get_mut(child)
+            let Ok((
+                mut beam,
+                mut xform,
+                mut visibility,
+                mut sprite,
+                mut xform_animator,
+                mut alpha_animator,
+            )) = q_beam.get_mut(child)
             else {
                 continue;
             };
