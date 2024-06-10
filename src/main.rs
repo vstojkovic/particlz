@@ -6,7 +6,7 @@ use bevy::ecs::system::{Commands, Res, ResMut};
 use bevy::prelude::*;
 use bevy::window::{Window, WindowPlugin};
 use bevy::DefaultPlugins;
-use engine::beam::BeamSet;
+use model::Piece;
 
 mod engine;
 mod model;
@@ -14,7 +14,7 @@ mod model;
 use self::engine::animation::{
     Animation, AnimationFinished, AnimationPlugin, AnimationSet, StartAnimation,
 };
-use self::engine::beam::{BeamPlugin, MoveBeams, ResetBeams};
+use self::engine::beam::{BeamPlugin, BeamSet, MoveBeams, ResetBeams};
 use self::engine::board::BoardResource;
 use self::engine::focus::{get_focus, Focus, FocusPlugin, UpdateFocusEvent};
 use self::engine::input::{InputPlugin, MoveManipulatorEvent, SelectManipulatorEvent};
@@ -106,8 +106,9 @@ fn move_manipulator(
 
     let to_coords = board.present.neighbor(coords, direction).unwrap();
     board.future.move_piece(coords, to_coords);
+    board.future.retarget_beams();
 
-    let anchor_id = board.get_piece(coords).unwrap();
+    let anchor_id = *board.pieces.get(coords).unwrap();
     ev_start_animation.send(StartAnimation {
         anchor: anchor_id,
         animation: Animation::Movement(direction),
@@ -151,41 +152,55 @@ fn finish_move(
 }
 
 fn make_test_board() -> Board {
+    fn add_tile(board: &mut Board, row: usize, col: usize, kind: TileKind, tint: Tint) {
+        board.tiles.set((row, col).into(), Tile::new(kind, tint));
+    }
+
+    fn add_horz_border(board: &mut Board, row: usize, col: usize, border: Border) {
+        board.horz_borders.set((row, col).into(), border);
+    }
+
+    fn add_vert_border(board: &mut Board, row: usize, col: usize, border: Border) {
+        board.vert_borders.set((row, col).into(), border);
+    }
+
+    fn add_piece<P: Into<Option<Piece>>>(board: &mut Board, row: usize, col: usize, piece: P) {
+        board.pieces.set((row, col).into(), piece.into());
+    }
+
     let mut board = Board::new(5, 5);
-    board.set_tile((0, 0).into(), Tile::new(TileKind::Platform, Tint::White));
-    board.set_tile((0, 1).into(), Tile::new(TileKind::Platform, Tint::Green));
-    board.set_tile((0, 2).into(), Tile::new(TileKind::Platform, Tint::Yellow));
-    board.set_tile((0, 3).into(), Tile::new(TileKind::Platform, Tint::Red));
+    add_tile(&mut board, 0, 0, TileKind::Platform, Tint::White);
+    add_tile(&mut board, 0, 1, TileKind::Platform, Tint::Green);
+    add_tile(&mut board, 0, 2, TileKind::Platform, Tint::Yellow);
+    add_tile(&mut board, 0, 3, TileKind::Platform, Tint::Red);
     for row in 1..=3 {
         for col in 0..=4 {
-            board.set_tile(
-                (row, col).into(),
-                Tile::new(TileKind::Platform, Tint::White),
-            );
+            add_tile(&mut board, row, col, TileKind::Platform, Tint::White);
         }
     }
-    board.set_tile((4, 4).into(), Tile::new(TileKind::Collector, Tint::White));
-    board.set_tile((4, 3).into(), Tile::new(TileKind::Collector, Tint::Green));
-    board.set_tile((4, 2).into(), Tile::new(TileKind::Collector, Tint::Yellow));
-    board.set_tile((4, 1).into(), Tile::new(TileKind::Collector, Tint::Red));
-    board.set_horz_border((0, 0).into(), Border::Wall);
-    board.set_horz_border((1, 0).into(), Border::Wall);
-    board.set_horz_border((4, 4).into(), Border::Window);
-    board.set_horz_border((5, 4).into(), Border::Window);
-    board.set_vert_border((0, 0).into(), Border::Window);
-    board.set_vert_border((4, 5).into(), Border::Wall);
-    board.set_piece((1, 1).into(), Particle::new(Tint::Green));
-    board.set_piece((1, 2).into(), Particle::new(Tint::Yellow));
-    board.set_piece((1, 3).into(), Particle::new(Tint::Red));
-    board.set_piece((2, 0).into(), Manipulator::new(Emitters::Left));
-    board.set_piece((2, 1).into(), Manipulator::new(Emitters::Up));
-    board.set_piece((2, 2).into(), Manipulator::new(Emitters::Right));
-    board.set_piece((2, 3).into(), Manipulator::new(Emitters::Down));
-    board.set_piece((2, 4).into(), Manipulator::new(Emitters::LeftRight));
-    board.set_piece((3, 0).into(), Manipulator::new(Emitters::LeftUp));
-    board.set_piece((3, 1).into(), Manipulator::new(Emitters::LeftDown));
-    board.set_piece((3, 2).into(), Manipulator::new(Emitters::RightUp));
-    board.set_piece((3, 3).into(), Manipulator::new(Emitters::RightDown));
-    board.set_piece((3, 4).into(), Manipulator::new(Emitters::UpDown));
+    add_tile(&mut board, 4, 4, TileKind::Collector, Tint::White);
+    add_tile(&mut board, 4, 3, TileKind::Collector, Tint::Green);
+    add_tile(&mut board, 4, 2, TileKind::Collector, Tint::Yellow);
+    add_tile(&mut board, 4, 1, TileKind::Collector, Tint::Red);
+    add_horz_border(&mut board, 0, 0, Border::Wall);
+    add_horz_border(&mut board, 1, 0, Border::Wall);
+    add_horz_border(&mut board, 4, 4, Border::Window);
+    add_horz_border(&mut board, 5, 4, Border::Window);
+    add_vert_border(&mut board, 0, 0, Border::Window);
+    add_vert_border(&mut board, 4, 5, Border::Wall);
+    add_piece(&mut board, 1, 1, Particle::new(Tint::Green));
+    add_piece(&mut board, 1, 2, Particle::new(Tint::Yellow));
+    add_piece(&mut board, 1, 3, Particle::new(Tint::Red));
+    add_piece(&mut board, 2, 0, Manipulator::new(Emitters::Left));
+    add_piece(&mut board, 2, 1, Manipulator::new(Emitters::Up));
+    add_piece(&mut board, 2, 2, Manipulator::new(Emitters::Right));
+    add_piece(&mut board, 2, 3, Manipulator::new(Emitters::Down));
+    add_piece(&mut board, 2, 4, Manipulator::new(Emitters::LeftRight));
+    add_piece(&mut board, 3, 0, Manipulator::new(Emitters::LeftUp));
+    add_piece(&mut board, 3, 1, Manipulator::new(Emitters::LeftDown));
+    add_piece(&mut board, 3, 2, Manipulator::new(Emitters::RightUp));
+    add_piece(&mut board, 3, 3, Manipulator::new(Emitters::RightDown));
+    add_piece(&mut board, 3, 4, Manipulator::new(Emitters::UpDown));
+    board.retarget_beams();
     board
 }

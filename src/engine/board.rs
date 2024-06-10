@@ -6,7 +6,7 @@ use bevy::math::Vec2;
 use bevy::prelude::SpatialBundle;
 use bevy::transform::components::Transform;
 
-use crate::model::{Board, BoardCoords, Piece};
+use crate::model::{Board, BoardCoords, GridMap, Piece};
 
 use super::border::{spawn_horz_border, spawn_vert_border};
 use super::focus::spawn_focus;
@@ -19,11 +19,11 @@ use super::{Assets, BoardCoordsHolder, EngineCoords};
 pub struct BoardResource {
     pub present: Board,
     pub future: Board,
-    parent: Entity,
-    tiles: Vec<Option<Entity>>,
-    horz_borders: Vec<Option<Entity>>,
-    vert_borders: Vec<Option<Entity>>,
-    pieces: Vec<Option<Entity>>,
+    pub parent: Entity,
+    pub tiles: GridMap<Entity>,
+    pub horz_borders: GridMap<Entity>,
+    pub vert_borders: GridMap<Entity>,
+    pub pieces: GridMap<Entity>,
 }
 
 #[derive(Bundle, Default)]
@@ -35,10 +35,10 @@ impl BoardResource {
     pub fn new(board: Board) -> Self {
         let present = board;
         let future = present.clone();
-        let tiles = Vec::with_capacity(present.tiles.len());
-        let horz_borders = Vec::with_capacity(present.horz_borders.len());
-        let vert_borders = Vec::with_capacity(present.vert_borders.len());
-        let pieces = Vec::with_capacity(present.pieces.len());
+        let tiles = GridMap::like(&present.tiles);
+        let horz_borders = GridMap::like(&present.horz_borders);
+        let vert_borders = GridMap::like(&present.vert_borders);
+        let pieces = GridMap::like(&present.pieces);
         Self {
             present,
             future,
@@ -54,75 +54,39 @@ impl BoardResource {
         let mut parent = commands.spawn(BoardBundle::default());
         self.parent = parent.id();
         parent.with_children(|parent| {
-            for row in 0..self.present.rows {
-                for col in 0..self.present.cols {
-                    self.tiles.push(
-                        self.present
-                            .get_tile((row, col).into())
-                            .map(|tile| spawn_tile(parent, tile, (row, col).into(), &assets.tiles)),
-                    );
-                }
+            for (coords, tile) in self.present.tiles.iter() {
+                self.tiles
+                    .set(coords, spawn_tile(parent, tile, coords, &assets.tiles));
             }
 
-            for row in 0..=self.present.rows {
-                for col in 0..self.present.cols {
-                    self.horz_borders
-                        .push(
-                            self.present
-                                .get_horz_border((row, col).into())
-                                .map(|border| {
-                                    spawn_horz_border(
-                                        parent,
-                                        border,
-                                        (row, col).into(),
-                                        &assets.borders,
-                                    )
-                                }),
-                        );
-                }
+            for (coords, border) in self.present.horz_borders.iter() {
+                self.horz_borders.set(
+                    coords,
+                    spawn_horz_border(parent, border, coords, &assets.borders),
+                );
             }
 
-            for row in 0..self.present.rows {
-                for col in 0..=self.present.cols {
-                    self.vert_borders
-                        .push(
-                            self.present
-                                .get_vert_border((row, col).into())
-                                .map(|border| {
-                                    spawn_vert_border(
-                                        parent,
-                                        border,
-                                        (row, col).into(),
-                                        &assets.borders,
-                                    )
-                                }),
-                        );
-                }
+            for (coords, border) in self.present.vert_borders.iter() {
+                self.vert_borders.set(
+                    coords,
+                    spawn_vert_border(parent, border, coords, &assets.borders),
+                );
             }
 
-            for row in 0..self.present.rows {
-                for col in 0..self.present.cols {
-                    self.pieces
-                        .push(
-                            self.present
-                                .get_piece((row, col).into())
-                                .map(|piece| match piece {
-                                    Piece::Particle(particle) => spawn_particle(
-                                        parent,
-                                        particle,
-                                        (row, col).into(),
-                                        &assets.particles,
-                                    ),
-                                    Piece::Manipulator(manipulator) => spawn_manipulator(
-                                        parent,
-                                        manipulator,
-                                        (row, col).into(),
-                                        &self.present,
-                                        &assets.manipulators,
-                                    ),
-                                }),
-                        );
-                }
+            for (coords, piece) in self.present.pieces.iter() {
+                let entity = match piece {
+                    Piece::Particle(particle) => {
+                        spawn_particle(parent, particle, coords, &assets.particles)
+                    }
+                    Piece::Manipulator(manipulator) => spawn_manipulator(
+                        parent,
+                        manipulator,
+                        coords,
+                        &self.present,
+                        &assets.manipulators,
+                    ),
+                };
+                self.pieces.set(coords, entity);
             }
 
             spawn_focus(parent, &assets.focus);
@@ -138,16 +102,12 @@ impl BoardResource {
         let origin = xform.translation.truncate();
         let pos = pos - origin;
         let coords = BoardCoords::from_xy(pos)?;
-        if coords.row < self.present.rows && coords.col < self.present.cols {
+        if self.present.dims.contains(coords) {
             let center = coords.to_xy();
             Some((coords, pos - center))
         } else {
             None
         }
-    }
-
-    pub fn get_piece(&self, coords: BoardCoords) -> Option<Entity> {
-        self.pieces[coords.row * self.present.cols + coords.col].clone()
     }
 
     pub fn update_present(&mut self) {
@@ -160,13 +120,11 @@ impl BoardResource {
         to_coords: BoardCoords,
         q_anchor: &mut Query<(&mut BoardCoordsHolder, &mut Transform)>,
     ) {
-        let from_idx = from_coords.row * self.present.cols + from_coords.col;
-        let Some(anchor) = self.pieces[from_idx].take() else {
+        let Some(anchor) = self.pieces.take(from_coords) else {
             return;
         };
 
-        let to_idx = to_coords.row * self.present.cols + to_coords.col;
-        self.pieces[to_idx] = Some(anchor);
+        self.pieces.set(to_coords, anchor);
 
         let (mut anchor_coords, mut anchor_xform) = q_anchor.get_mut(anchor).unwrap();
         anchor_coords.0 = to_coords;

@@ -1,12 +1,18 @@
 //! Engine-agnostic game data and logic
 
+use enum_map::{Enum, EnumMap};
 use enumset::{enum_set, EnumSet, EnumSetType};
+pub use grid::GridMap;
 use strum::IntoEnumIterator;
 use strum_macros::{EnumCount, EnumIter, FromRepr};
 
+mod grid;
 mod pbc1;
 
 pub use pbc1::Pbc1DecodeError;
+
+pub const MAX_BOARD_ROWS: usize = 15;
+pub const MAX_BOARD_COLS: usize = 15;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter, FromRepr)]
 #[repr(u8)]
@@ -17,7 +23,7 @@ pub enum Tint {
     Red,
 }
 
-#[derive(Debug, Hash, EnumIter, EnumCount, EnumSetType)]
+#[derive(Debug, Hash, EnumIter, EnumCount, EnumSetType, Enum)]
 pub enum Direction {
     Up,
     Left,
@@ -33,12 +39,17 @@ pub enum Orientation {
 
 #[derive(Clone)]
 pub struct Board {
+    pub dims: Dimensions,
+    pub tiles: GridMap<Tile>,
+    pub horz_borders: GridMap<Border>,
+    pub vert_borders: GridMap<Border>,
+    pub pieces: GridMap<Piece>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Dimensions {
     pub rows: usize,
     pub cols: usize,
-    pub tiles: Vec<Option<Tile>>,
-    pub horz_borders: Vec<Option<Border>>,
-    pub vert_borders: Vec<Option<Border>>,
-    pub pieces: Vec<Option<Piece>>,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -80,6 +91,7 @@ pub struct Particle {
 #[derive(Debug, Clone)]
 pub struct Manipulator {
     pub emitters: Emitters,
+    targets: EnumMap<Direction, Option<BeamTarget>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter, FromRepr)]
@@ -111,25 +123,14 @@ pub enum BeamTargetKind {
 
 impl Board {
     pub fn new(rows: usize, cols: usize) -> Self {
-        let num_tiles = rows * cols;
-        let mut tiles = Vec::with_capacity(num_tiles);
-        tiles.resize_with(num_tiles, || None);
-
-        let num_horz_borders = (rows + 1) * cols;
-        let mut horz_borders = Vec::with_capacity(num_horz_borders);
-        horz_borders.resize_with(num_horz_borders, || None);
-
-        let num_vert_borders = rows * (cols + 1);
-        let mut vert_borders = Vec::with_capacity(num_vert_borders);
-        vert_borders.resize_with(num_vert_borders, || None);
-
-        let num_pieces = num_tiles;
-        let mut pieces = Vec::with_capacity(num_pieces);
-        pieces.resize_with(num_pieces, || None);
+        let dims = Dimensions::new(rows, cols);
+        let tiles = GridMap::new(rows, cols);
+        let horz_borders = GridMap::new(rows + 1, cols);
+        let vert_borders = GridMap::new(rows, cols + 1);
+        let pieces = GridMap::new(rows, cols);
 
         Self {
-            rows,
-            cols,
+            dims,
             tiles,
             horz_borders,
             vert_borders,
@@ -142,20 +143,13 @@ impl Board {
     }
 
     pub fn copy_state_from(&mut self, other: &Self) {
-        assert_eq!(self.rows, other.rows);
-        assert_eq!(self.cols, other.cols);
+        assert_eq!(self.dims.rows, other.dims.rows);
+        assert_eq!(self.dims.cols, other.dims.cols);
 
-        self.tiles.clear();
-        self.tiles.extend_from_slice(&other.tiles);
-
-        self.horz_borders.clear();
-        self.horz_borders.extend_from_slice(&other.horz_borders);
-
-        self.vert_borders.clear();
-        self.vert_borders.extend_from_slice(&other.vert_borders);
-
-        self.pieces.clear();
-        self.pieces.extend_from_slice(&other.pieces);
+        self.tiles.mirror(&other.tiles);
+        self.horz_borders.mirror(&other.horz_borders);
+        self.vert_borders.mirror(&other.vert_borders);
+        self.pieces.mirror(&other.pieces);
     }
 
     pub fn neighbor(&self, coords: BoardCoords, direction: Direction) -> Option<BoardCoords> {
@@ -169,77 +163,43 @@ impl Board {
                 .checked_add_signed(-1)
                 .map(|col| (coords.row, col).into()),
             Direction::Down => Some(coords.row + 1)
-                .filter(|&row| row < self.rows)
+                .filter(|&row| row < self.dims.rows)
                 .map(|row| (row, coords.col).into()),
             Direction::Right => Some(coords.col + 1)
-                .filter(|&col| col < self.cols)
+                .filter(|&col| col < self.dims.cols)
                 .map(|col| (coords.row, col).into()),
         }
     }
 
-    pub fn border_coords(&self, tile_coords: BoardCoords, direction: Direction) -> BoardCoords {
-        match direction {
-            Direction::Up | Direction::Left => tile_coords,
-            Direction::Down => (tile_coords.row + 1, tile_coords.col).into(),
-            Direction::Right => (tile_coords.row, tile_coords.col + 1).into(),
-        }
-    }
-
-    pub fn get_tile(&self, coords: BoardCoords) -> Option<&Tile> {
-        self.tiles[coords.row * self.cols + coords.col].as_ref()
-    }
-
-    pub fn set_tile<T: Into<Option<Tile>>>(&mut self, coords: BoardCoords, tile: T) {
-        self.tiles[coords.row * self.cols + coords.col] = tile.into();
-    }
-
-    pub fn get_horz_border(&self, coords: BoardCoords) -> Option<&Border> {
-        self.horz_borders[coords.row * self.cols + coords.col].as_ref()
-    }
-
-    pub fn set_horz_border<B: Into<Option<Border>>>(&mut self, coords: BoardCoords, border: B) {
-        self.horz_borders[coords.row * self.cols + coords.col] = border.into();
-    }
-
-    pub fn get_vert_border(&self, coords: BoardCoords) -> Option<&Border> {
-        self.vert_borders[coords.row * (self.cols + 1) + coords.col].as_ref()
-    }
-
-    pub fn set_vert_border<B: Into<Option<Border>>>(&mut self, coords: BoardCoords, border: B) {
-        self.vert_borders[coords.row * (self.cols + 1) + coords.col] = border.into();
-    }
-
-    pub fn get_border(&self, orientation: Orientation, coords: BoardCoords) -> Option<&Border> {
+    pub fn borders(&self, orientation: Orientation) -> &GridMap<Border> {
         match orientation {
-            Orientation::Horizontal => self.get_horz_border(coords),
-            Orientation::Vertical => self.get_vert_border(coords),
+            Orientation::Horizontal => &self.horz_borders,
+            Orientation::Vertical => &self.vert_borders,
         }
-    }
-
-    pub fn get_piece(&self, coords: BoardCoords) -> Option<&Piece> {
-        self.pieces[coords.row * self.cols + coords.col].as_ref()
-    }
-
-    pub fn set_piece<T: Into<Option<Piece>>>(&mut self, coords: BoardCoords, piece: T) {
-        self.pieces[coords.row * self.cols + coords.col] = piece.into();
     }
 
     pub fn move_piece(&mut self, from_coords: BoardCoords, to_coords: BoardCoords) {
-        let from_idx = from_coords.row * self.cols + from_coords.col;
-        let to_idx = to_coords.row * self.cols + to_coords.col;
-        self.pieces[to_idx] = self.pieces[from_idx].take();
+        let piece = self.pieces.take(from_coords);
+        self.pieces.set(to_coords, piece);
     }
 
-    pub fn iter_pieces(&self) -> impl Iterator<Item = (BoardCoords, &Piece)> {
-        self.pieces
-            .iter()
-            .enumerate()
-            .filter_map(|(idx, opt)| Some((idx, opt.as_ref()?)))
-            .map(|(idx, piece)| {
-                let row = idx / self.cols;
-                let col = idx % self.cols;
-                (BoardCoords::new(row, col), piece)
-            })
+    pub fn retarget_beams(&mut self) {
+        for coords in self.dims.iter() {
+            let emitters = match self.pieces.get(coords) {
+                Some(Piece::Manipulator(manipulator)) => manipulator.emitters,
+                _ => continue,
+            };
+            for direction in emitters.directions() {
+                let target = self.find_beam_target(coords, direction);
+                let manipulator = self
+                    .pieces
+                    .get_mut(coords)
+                    .unwrap()
+                    .as_manipulator_mut()
+                    .unwrap();
+                manipulator.targets[direction] = Some(target);
+            }
+        }
     }
 
     pub fn compute_allowed_moves(&self, coords: BoardCoords) -> EnumSet<Direction> {
@@ -249,10 +209,13 @@ impl Board {
             let Some(neighbor) = self.neighbor(coords, direction) else {
                 continue;
             };
-            let border_coords = self.border_coords(coords, direction);
+            let border_coords = coords.to_border_coords(direction);
             let border_orientation = direction.orientation().flip();
-            if self.get_piece(neighbor).is_none()
-                && self.get_border(border_orientation, border_coords).is_none()
+            if self.pieces.get(neighbor).is_none()
+                && self
+                    .borders(border_orientation)
+                    .get(border_coords)
+                    .is_none()
             {
                 moves.insert(direction);
             }
@@ -264,19 +227,19 @@ impl Board {
     pub fn prev_manipulator(&self, coords: Option<BoardCoords>) -> Option<BoardCoords> {
         // NOTE: An active board should never have 0 manipulators
         let mut coords = coords.unwrap_or_default();
-        let mut remaining = self.rows * self.cols;
+        let mut remaining = self.dims.rows * self.dims.cols;
         while remaining > 0 {
             if coords.col > 0 {
                 coords.col -= 1;
             } else {
-                coords.col = self.cols - 1;
+                coords.col = self.dims.cols - 1;
                 if coords.row > 0 {
                     coords.row -= 1;
                 } else {
-                    coords.row = self.rows - 1;
+                    coords.row = self.dims.rows - 1;
                 }
             }
-            if let Some(Piece::Manipulator(_)) = self.get_piece(coords) {
+            if let Some(Piece::Manipulator(_)) = self.pieces.get(coords) {
                 return Some(coords);
             }
             remaining -= 1;
@@ -286,10 +249,10 @@ impl Board {
 
     pub fn next_manipulator(&self, coords: Option<BoardCoords>) -> Option<BoardCoords> {
         // NOTE: An active board should never have 0 manipulators
-        let max_row = self.rows - 1;
-        let max_col = self.cols - 1;
+        let max_row = self.dims.rows - 1;
+        let max_col = self.dims.cols - 1;
         let mut coords = coords.unwrap_or_else(|| BoardCoords::new(max_row, max_col));
-        let mut remaining = self.rows * self.cols;
+        let mut remaining = self.dims.rows * self.dims.cols;
         while remaining > 0 {
             if coords.col < max_col {
                 coords.col += 1;
@@ -301,7 +264,7 @@ impl Board {
                     coords.row = 0;
                 }
             }
-            if let Some(Piece::Manipulator(_)) = self.get_piece(coords) {
+            if let Some(Piece::Manipulator(_)) = self.pieces.get(coords) {
                 return Some(coords);
             }
             remaining -= 1;
@@ -314,15 +277,15 @@ impl Board {
         let border_orientation = direction.orientation().flip();
 
         loop {
-            let border_coords = self.border_coords(piece_coords, direction);
-            if let Some(Border::Wall) = self.get_border(border_orientation, border_coords) {
+            let border_coords = piece_coords.to_border_coords(direction);
+            if let Some(Border::Wall) = self.borders(border_orientation).get(border_coords) {
                 return BeamTarget::border(border_coords);
             }
             piece_coords = match self.neighbor(piece_coords, direction) {
                 Some(neighbor) => neighbor,
                 None => return BeamTarget::border(border_coords),
             };
-            if self.get_piece(piece_coords).is_some() {
+            if self.pieces.get(piece_coords).is_some() {
                 return BeamTarget::piece(piece_coords);
             }
         }
@@ -347,9 +310,39 @@ impl Orientation {
     }
 }
 
+impl Dimensions {
+    pub fn new(rows: usize, cols: usize) -> Self {
+        Self { rows, cols }
+    }
+
+    pub fn contains(&self, coords: BoardCoords) -> bool {
+        (coords.row < self.rows) && (coords.col < self.cols)
+    }
+
+    pub fn iter(self) -> impl Iterator<Item = BoardCoords> {
+        (0..(self.rows * self.cols)).map(move |idx| self.coords(idx))
+    }
+
+    fn coords(&self, idx: usize) -> BoardCoords {
+        BoardCoords::new(idx / self.cols, idx % self.cols)
+    }
+
+    fn index(&self, coords: BoardCoords) -> usize {
+        coords.row * self.cols + coords.col
+    }
+}
+
 impl BoardCoords {
     pub fn new(row: usize, col: usize) -> Self {
         Self { row, col }
+    }
+
+    pub fn to_border_coords(self, direction: Direction) -> Self {
+        match direction {
+            Direction::Up | Direction::Left => self,
+            Direction::Down => (self.row + 1, self.col).into(),
+            Direction::Right => (self.row, self.col + 1).into(),
+        }
     }
 }
 
@@ -365,6 +358,24 @@ impl Tile {
     }
 }
 
+impl Piece {
+    pub fn as_manipulator(&self) -> Option<&Manipulator> {
+        if let Self::Manipulator(manipulator) = self {
+            Some(manipulator)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_manipulator_mut(&mut self) -> Option<&mut Manipulator> {
+        if let Self::Manipulator(manipulator) = self {
+            Some(manipulator)
+        } else {
+            None
+        }
+    }
+}
+
 impl Particle {
     pub fn new(tint: Tint) -> Self {
         assert!(tint != Tint::White);
@@ -374,7 +385,14 @@ impl Particle {
 
 impl Manipulator {
     pub fn new(emitters: Emitters) -> Self {
-        Self { emitters }
+        Self {
+            emitters,
+            targets: EnumMap::default(),
+        }
+    }
+
+    pub fn target(&self, direction: Direction) -> Option<BeamTarget> {
+        self.targets[direction]
     }
 }
 

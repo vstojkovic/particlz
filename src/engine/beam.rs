@@ -32,7 +32,6 @@ pub struct BeamSet;
 #[derive(Component, Debug)]
 pub struct Beam {
     direction: Direction,
-    target: BeamTarget,
     group: BeamGroup,
 }
 
@@ -89,11 +88,7 @@ impl BeamBundle {
         alpha_animator.state = AnimatorState::Paused;
 
         Self {
-            beam: Beam {
-                direction,
-                target,
-                group,
-            },
+            beam: Beam { direction, group },
             sprite: SpriteBundle {
                 sprite: Sprite {
                     color: beam_color(group.alpha()),
@@ -156,9 +151,10 @@ fn spawn_beam_group(
         },
         AnimationBundle::new(anchor.parent_entity(), Z_LAYER),
     ));
+    let manipulator = board.pieces.get(origin).unwrap().as_manipulator().unwrap();
     beams.with_children(|beams| {
         for direction in emitters.directions() {
-            let target = board.find_beam_target(origin, direction);
+            let target = manipulator.target(direction).unwrap();
             beams.spawn(BeamBundle::new(origin, direction, target, group));
         }
     });
@@ -169,7 +165,7 @@ fn move_beams(
     board: Res<BoardResource>,
     q_children: Query<&Children>,
     mut q_beam: Query<(
-        &mut Beam,
+        &Beam,
         &mut Transform,
         &mut Visibility,
         &mut Sprite,
@@ -186,18 +182,18 @@ fn move_beams(
     let Some(event) = events.read().last() else {
         return;
     };
-    for (coords, piece) in board.present.iter_pieces() {
+    for (coords, piece) in board.present.pieces.iter() {
         let Piece::Manipulator(_) = piece else {
             continue;
         };
-        let anchor = board.get_piece(coords).unwrap();
+        let anchor = *board.pieces.get(coords).unwrap();
         let future_origin = match anchor == event.anchor {
             false => coords,
             true => board.present.neighbor(coords, event.direction).unwrap(),
         };
         for child in q_children.iter_descendants(anchor) {
             let Ok((
-                mut beam,
+                beam,
                 mut xform,
                 mut visibility,
                 mut sprite,
@@ -208,9 +204,16 @@ fn move_beams(
                 continue;
             };
 
-            beam.target = board.future.find_beam_target(future_origin, beam.direction);
-
-            let future_scale = beam_scale(future_origin, beam.direction, beam.target);
+            let target = board
+                .future
+                .pieces
+                .get(future_origin)
+                .unwrap()
+                .as_manipulator()
+                .unwrap()
+                .target(beam.direction)
+                .unwrap();
+            let future_scale = beam_scale(future_origin, beam.direction, target);
             let beam_change = if future_scale == xform.scale.truncate() {
                 BeamChange::None
             } else if beam.direction.orientation() == event.direction.orientation() {
@@ -258,6 +261,7 @@ fn move_beams(
 
 fn reset_beams(
     mut events: EventReader<ResetBeams>,
+    board: Res<BoardResource>,
     mut q_beam: Query<(
         Entity,
         &Beam,
@@ -281,7 +285,16 @@ fn reset_beams(
             .find_map(|id| q_origin.get(id).ok())
             .unwrap()
             .0;
-        xform.scale = beam_scale(origin, beam.direction, beam.target).extend(1.0);
+        let target = board
+            .present
+            .pieces
+            .get(origin)
+            .unwrap()
+            .as_manipulator()
+            .unwrap()
+            .target(beam.direction)
+            .unwrap();
+        xform.scale = beam_scale(origin, beam.direction, target).extend(1.0);
         *visibility = beam.group.visibility();
         alpha_animator.stop();
         sprite.color = beam_color(beam.group.alpha());
