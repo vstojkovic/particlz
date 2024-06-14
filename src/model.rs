@@ -203,25 +203,22 @@ impl Board {
     }
 
     pub fn compute_allowed_moves(&self, coords: BoardCoords) -> EnumSet<Direction> {
-        let mut moves = EnumSet::empty();
+        Direction::iter()
+            .filter(|&direction| self.can_move(coords, direction))
+            .collect()
+    }
 
-        for direction in Direction::iter() {
-            let Some(neighbor) = self.neighbor(coords, direction) else {
-                continue;
-            };
-            let border_coords = coords.to_border_coords(direction);
-            let border_orientation = direction.orientation().flip();
-            if self.pieces.get(neighbor).is_none()
-                && self
-                    .borders(border_orientation)
-                    .get(border_coords)
-                    .is_none()
-            {
-                moves.insert(direction);
-            }
-        }
-
-        moves
+    pub fn can_move(&self, piece_coords: BoardCoords, direction: Direction) -> bool {
+        let Some(neighbor) = self.neighbor(piece_coords, direction) else {
+            return false;
+        };
+        let border_coords = piece_coords.to_border_coords(direction);
+        let border_orientation = direction.orientation().flip();
+        self.pieces.get(neighbor).is_none()
+            && self
+                .borders(border_orientation)
+                .get(border_coords)
+                .is_none()
     }
 
     pub fn prev_manipulator(&self, coords: Option<BoardCoords>) -> Option<BoardCoords> {
