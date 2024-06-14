@@ -6,6 +6,7 @@ use bevy::ecs::system::{Commands, Res, ResMut};
 use bevy::prelude::*;
 use bevy::window::{Window, WindowPlugin};
 use bevy::DefaultPlugins;
+use engine::animation::MoveRole;
 use model::Piece;
 
 mod engine;
@@ -97,24 +98,27 @@ fn move_manipulator(
     let Some(event) = ev_move_manipulator.read().last() else {
         return;
     };
-    let Some(coords) = focus.coords() else {
+    let Some(leader_coords) = focus.coords() else {
         warn!("Received {:?} without a selected manipulator", event);
         return;
     };
 
     let direction = event.0;
 
-    let to_coords = board.present.neighbor(coords, direction).unwrap();
-    board.future.move_piece(coords, to_coords);
+    let move_set = board.present.compute_move_set(leader_coords, direction);
+    board.future.move_pieces(&move_set, direction);
     board.future.retarget_beams();
 
-    let anchor_id = *board.pieces.get(coords).unwrap();
-    ev_start_animation.send(StartAnimation {
-        anchor: anchor_id,
-        animation: Animation::Movement(direction),
-    });
+    for coords in move_set.iter() {
+        let anchor_id = *board.pieces.get(coords).unwrap();
+        let role = if coords == leader_coords { MoveRole::Leader } else { MoveRole::Dragged };
+        ev_start_animation.send(StartAnimation {
+            anchor: anchor_id,
+            animation: Animation::Movement(direction, role),
+        });
+    }
     ev_move_beams.send(MoveBeams {
-        anchor: anchor_id,
+        move_set,
         direction,
     });
     ev_update_focus.send(UpdateFocusEvent(Focus::Busy));
@@ -136,15 +140,26 @@ fn finish_move(
     for event in ev_animation.read() {
         match event.animation {
             Animation::Idle => unreachable!(),
-            Animation::Movement(direction) => {
+            Animation::Movement(direction, role) => {
                 let (coords, _) = anchor.get_mut(event.anchor).unwrap();
                 let from_coords = coords.0;
                 let to_coords = board.present.neighbor(from_coords, direction).unwrap();
-                board.move_piece(from_coords, to_coords, &mut anchor.transmute_lens().query());
-                ev_update_focus.send(UpdateFocusEvent(Focus::Selected(
+                if let Some(entity) = board.pieces.get(from_coords) {
+                    if *entity == event.anchor {
+                        board.pieces.set(from_coords, None);
+                    }
+                }
+                board.move_piece(
+                    event.anchor,
                     to_coords,
-                    board.present.compute_allowed_moves(to_coords),
-                )));
+                    &mut anchor.transmute_lens().query(),
+                );
+                if let MoveRole::Leader = role {
+                    ev_update_focus.send(UpdateFocusEvent(Focus::Selected(
+                        to_coords,
+                        board.present.compute_allowed_moves(to_coords),
+                    )));
+                }
             }
         }
     }

@@ -1,12 +1,16 @@
 //! Engine-agnostic game data and logic
 
+use std::fmt::Debug;
+
 use enum_map::{Enum, EnumMap};
 use enumset::{enum_set, EnumSet, EnumSetType};
-pub use grid::GridMap;
+pub use grid::{GridMap, GridSet};
+use movement::MoveSolver;
 use strum::IntoEnumIterator;
 use strum_macros::{EnumCount, EnumIter, FromRepr};
 
 mod grid;
+mod movement;
 mod pbc1;
 
 pub use pbc1::Pbc1DecodeError;
@@ -52,7 +56,7 @@ pub struct Dimensions {
     pub cols: usize,
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
 pub struct BoardCoords {
     pub row: usize,
     pub col: usize,
@@ -115,7 +119,7 @@ pub struct BeamTarget {
     pub coords: BoardCoords,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BeamTargetKind {
     Piece,
     Border,
@@ -183,6 +187,13 @@ impl Board {
         self.pieces.set(to_coords, piece);
     }
 
+    pub fn move_pieces(&mut self, move_set: &GridSet, direction: Direction) {
+        match direction {
+            Direction::Up | Direction::Left => self.iter_move(move_set.iter(), direction),
+            Direction::Down | Direction::Right => self.iter_move(move_set.iter().rev(), direction),
+        }
+    }
+
     pub fn retarget_beams(&mut self) {
         for coords in self.dims.iter() {
             let emitters = match self.pieces.get(coords) {
@@ -203,22 +214,14 @@ impl Board {
     }
 
     pub fn compute_allowed_moves(&self, coords: BoardCoords) -> EnumSet<Direction> {
+        let solver = MoveSolver::new(self, coords);
         Direction::iter()
-            .filter(|&direction| self.can_move(coords, direction))
+            .filter(|&direction| solver.clone().can_move(direction))
             .collect()
     }
 
-    pub fn can_move(&self, piece_coords: BoardCoords, direction: Direction) -> bool {
-        let Some(neighbor) = self.neighbor(piece_coords, direction) else {
-            return false;
-        };
-        let border_coords = piece_coords.to_border_coords(direction);
-        let border_orientation = direction.orientation().flip();
-        self.pieces.get(neighbor).is_none()
-            && self
-                .borders(border_orientation)
-                .get(border_coords)
-                .is_none()
+    pub fn compute_move_set(&self, piece_coords: BoardCoords, direction: Direction) -> GridSet {
+        MoveSolver::new(self, piece_coords).drag(direction)
     }
 
     pub fn prev_manipulator(&self, coords: Option<BoardCoords>) -> Option<BoardCoords> {
@@ -269,7 +272,7 @@ impl Board {
         None
     }
 
-    pub fn find_beam_target(&self, coords: BoardCoords, direction: Direction) -> BeamTarget {
+    fn find_beam_target(&self, coords: BoardCoords, direction: Direction) -> BeamTarget {
         let mut piece_coords = coords;
         let border_orientation = direction.orientation().flip();
 
@@ -285,6 +288,13 @@ impl Board {
             if self.pieces.get(piece_coords).is_some() {
                 return BeamTarget::piece(piece_coords);
             }
+        }
+    }
+
+    fn iter_move<I: Iterator<Item = BoardCoords>>(&mut self, iter: I, direction: Direction) {
+        for from_coords in iter {
+            let to_coords = self.neighbor(from_coords, direction).unwrap();
+            self.move_piece(from_coords, to_coords);
         }
     }
 }
@@ -316,7 +326,7 @@ impl Dimensions {
         (coords.row < self.rows) && (coords.col < self.cols)
     }
 
-    pub fn iter(self) -> impl Iterator<Item = BoardCoords> {
+    pub fn iter(self) -> impl DoubleEndedIterator<Item = BoardCoords> {
         (0..(self.rows * self.cols)).map(move |idx| self.coords(idx))
     }
 
@@ -340,6 +350,12 @@ impl BoardCoords {
             Direction::Down => (self.row + 1, self.col).into(),
             Direction::Right => (self.row, self.col + 1).into(),
         }
+    }
+}
+
+impl Debug for BoardCoords {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}, {})", self.row, self.col)
     }
 }
 

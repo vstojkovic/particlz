@@ -30,7 +30,13 @@ pub struct AnimationSet;
 #[derive(Component, Debug, Clone, Copy)]
 pub enum Animation {
     Idle,
-    Movement(Direction),
+    Movement(Direction, MoveRole),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum MoveRole {
+    Leader,
+    Dragged,
 }
 
 #[derive(Event, Debug)]
@@ -60,7 +66,7 @@ impl Animation {
         let tweenable = animator.tweenable_mut();
         match self {
             Self::Idle => tweenable.set_progress(1.0),
-            Self::Movement(direction) => {
+            Self::Movement(direction, _) => {
                 tweenable.set_elapsed(MOVE_DURATION * (direction as isize as u32))
             }
         }

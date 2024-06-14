@@ -17,7 +17,9 @@ use bevy::transform::components::Transform;
 use bevy_tweening::lens::{SpriteColorLens, TransformScaleLens};
 use bevy_tweening::{Animator, AnimatorState, Delay, EaseFunction, Tween};
 
-use crate::model::{BeamTarget, BeamTargetKind, Board, BoardCoords, Direction, Emitters, Piece};
+use crate::model::{
+    BeamTarget, BeamTargetKind, Board, BoardCoords, Direction, Emitters, GridSet, Piece,
+};
 
 use super::animation::AnimationBundle;
 use super::board::BoardResource;
@@ -51,7 +53,7 @@ pub struct BeamBundle {
 
 #[derive(Event)]
 pub struct MoveBeams {
-    pub anchor: Entity,
+    pub move_set: GridSet,
     pub direction: Direction,
 }
 
@@ -187,7 +189,7 @@ fn move_beams(
             continue;
         };
         let anchor = *board.pieces.get(coords).unwrap();
-        let future_origin = match anchor == event.anchor {
+        let future_origin = match event.move_set.contains(coords) {
             false => coords,
             true => board.present.neighbor(coords, event.direction).unwrap(),
         };

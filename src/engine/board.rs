@@ -116,14 +116,10 @@ impl BoardResource {
 
     pub fn move_piece(
         &mut self,
-        from_coords: BoardCoords,
+        anchor: Entity,
         to_coords: BoardCoords,
         q_anchor: &mut Query<(&mut BoardCoordsHolder, &mut Transform)>,
     ) {
-        let Some(anchor) = self.pieces.take(from_coords) else {
-            return;
-        };
-
         self.pieces.set(to_coords, anchor);
 
         let (mut anchor_coords, mut anchor_xform) = q_anchor.get_mut(anchor).unwrap();
