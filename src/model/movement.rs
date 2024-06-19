@@ -1,5 +1,8 @@
 use super::grid::Grid;
-use super::{BeamTargetKind, Board, BoardCoords, Border, Direction, GridMap, GridSet, Manipulator};
+use super::{
+    BeamTargetKind, Board, BoardCoords, Border, Direction, GridMap, GridSet, Manipulator, Piece,
+    Tint,
+};
 
 #[derive(Clone)]
 pub struct MoveSolver<'b> {
@@ -70,6 +73,13 @@ impl<'b> MoveSolver<'b> {
         let Some(neighbor) = self.board.neighbor(coords, drag_direction) else {
             return true;
         };
+        if let Some(Piece::Particle(particle)) = self.board.pieces.get(coords) {
+            if let Some(tile) = self.board.tiles.get(neighbor) {
+                if (tile.tint != Tint::White) && (tile.tint != particle.tint) {
+                    return true;
+                }
+            }
+        }
         if self.board.pieces.get(neighbor).is_none() {
             return false;
         }
@@ -135,6 +145,17 @@ mod tests {
     }
 
     #[test]
+    fn tint_mismatch() {
+        let mut board = empty_board(1, 3);
+        add_manipulator(&mut board, (0, 0).into(), Emitters::Right);
+        board.pieces.set((0, 1).into(), Particle::new(Tint::Green));
+        add_tile(&mut board, (0, 2).into(), TileKind::Platform, Tint::Red);
+        board.retarget_beams();
+
+        assert!(!MoveSolver::new(&board, (0, 0).into()).can_move(Direction::Right));
+    }
+
+    #[test]
     fn smoke_test() {
         let mut board = empty_board(5, 6);
         add_manipulator(&mut board, (1, 1).into(), Emitters::Right);
@@ -167,11 +188,13 @@ mod tests {
     fn empty_board(rows: usize, cols: usize) -> Board {
         let mut board = Board::new(rows, cols);
         for coords in board.dims.iter() {
-            board
-                .tiles
-                .set(coords, Tile::new(TileKind::Platform, Tint::White));
+            add_tile(&mut board, coords, TileKind::Platform, Tint::White);
         }
         board
+    }
+
+    fn add_tile(board: &mut Board, coords: BoardCoords, kind: TileKind, tint: Tint) {
+        board.tiles.set(coords, Tile::new(kind, tint));
     }
 
     fn add_manipulator(board: &mut Board, coords: BoardCoords, emitters: Emitters) {
