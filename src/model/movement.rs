@@ -1,14 +1,14 @@
 use super::grid::Grid;
 use super::{
     BeamTargetKind, Board, BoardCoords, Border, Direction, GridMap, GridSet, Manipulator, Piece,
-    Tint,
+    Tile, TileKind, Tint,
 };
 
 #[derive(Clone)]
 pub struct MoveSolver<'b> {
     board: &'b Board,
     leader: BoardCoords,
-    graph: GridMap<usize>,
+    graph: GridMap<u8>,
 }
 
 impl<'b> MoveSolver<'b> {
@@ -79,6 +79,13 @@ impl<'b> MoveSolver<'b> {
                     return true;
                 }
             }
+            if let Some(Tile {
+                kind: TileKind::Collector,
+                ..
+            }) = self.board.tiles.get(coords)
+            {
+                return true;
+            }
         }
         if self.board.pieces.get(neighbor).is_none() {
             return false;
@@ -93,7 +100,7 @@ impl<'b> MoveSolver<'b> {
     }
 }
 
-fn gather(board: &Board, coords: BoardCoords, graph: &mut GridMap<usize>, visited: &mut GridSet) {
+fn gather(board: &Board, coords: BoardCoords, graph: &mut GridMap<u8>, visited: &mut GridSet) {
     if let Some(ref_count) = graph.get_mut(coords) {
         *ref_count += 1;
     } else {
@@ -150,6 +157,17 @@ mod tests {
         add_manipulator(&mut board, (0, 0).into(), Emitters::Right);
         board.pieces.set((0, 1).into(), Particle::new(Tint::Green));
         add_tile(&mut board, (0, 2).into(), TileKind::Platform, Tint::Red);
+        board.retarget_beams();
+
+        assert!(!MoveSolver::new(&board, (0, 0).into()).can_move(Direction::Right));
+    }
+
+    #[test]
+    fn collected_particles() {
+        let mut board = empty_board(1, 3);
+        add_manipulator(&mut board, (0, 0).into(), Emitters::Right);
+        board.pieces.set((0, 1).into(), Particle::new(Tint::Green));
+        add_tile(&mut board, (0, 1).into(), TileKind::Collector, Tint::White);
         board.retarget_beams();
 
         assert!(!MoveSolver::new(&board, (0, 0).into()).can_move(Direction::Right));
