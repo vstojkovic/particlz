@@ -5,7 +5,6 @@ use bevy::ecs::bundle::Bundle;
 use bevy::ecs::entity::Entity;
 use bevy::hierarchy::{BuildChildren, ChildBuilder};
 use bevy::math::Vec2;
-use bevy::prelude::SpatialBundle;
 use bevy::render::texture::Image;
 use bevy::sprite::SpriteBundle;
 use bevy::transform::components::Transform;
@@ -13,7 +12,7 @@ use strum::IntoEnumIterator;
 
 use crate::model::{Board, BoardCoords, Emitters, Manipulator};
 
-use super::animation::{AnimationAnchorBundle, AnimationBundle};
+use super::animation::AnimationBundle;
 use super::beam::spawn_beams;
 use super::{BoardCoordsHolder, EngineCoords};
 
@@ -22,14 +21,8 @@ pub struct ManipulatorAssets {
 }
 
 #[derive(Bundle)]
-struct ManipulatorAnchorBundle {
-    coords: BoardCoordsHolder,
-    spatial: SpatialBundle,
-    animation: AnimationAnchorBundle,
-}
-
-#[derive(Bundle)]
 struct ManipulatorBundle {
+    coords: BoardCoordsHolder,
     sprite: SpriteBundle,
     animation: AnimationBundle,
 }
@@ -56,36 +49,21 @@ impl ManipulatorAssets {
     }
 }
 
-impl ManipulatorAnchorBundle {
-    fn new(coords: BoardCoords) -> Self {
-        let coords = BoardCoordsHolder(coords);
-        Self {
-            coords,
-            spatial: SpatialBundle {
-                transform: Transform {
-                    translation: coords.to_xy().extend(0.0),
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-            animation: AnimationAnchorBundle::new(),
-        }
-    }
-}
-
 impl ManipulatorBundle {
-    fn new(manipulator: &Manipulator, anchor: Entity, assets: &ManipulatorAssets) -> Self {
+    fn new(coords: BoardCoords, manipulator: &Manipulator, assets: &ManipulatorAssets) -> Self {
+        let coords = BoardCoordsHolder(coords);
         let texture = assets.textures[&manipulator.emitters].clone();
         Self {
+            coords,
             sprite: SpriteBundle {
                 texture,
                 transform: Transform {
-                    translation: Vec2::ZERO.extend(Z_LAYER),
+                    translation: coords.to_xy().extend(Z_LAYER),
                     ..Default::default()
                 },
                 ..Default::default()
             },
-            animation: AnimationBundle::new(anchor, Z_LAYER),
+            animation: AnimationBundle::default(),
         }
     }
 }
@@ -97,16 +75,9 @@ pub fn spawn_manipulator(
     board: &Board,
     assets: &ManipulatorAssets,
 ) -> Entity {
-    let mut anchor = parent.spawn(ManipulatorAnchorBundle::new(coords));
-    anchor.with_children(|anchor| {
-        anchor.spawn(ManipulatorBundle::new(
-            manipulator,
-            anchor.parent_entity(),
-            assets,
-        ));
-        spawn_beams(anchor, coords, manipulator.emitters, board)
-    });
-    anchor.id()
+    let mut parent = parent.spawn(ManipulatorBundle::new(coords, manipulator, assets));
+    parent.with_children(|parent| spawn_beams(parent, coords, manipulator.emitters, board));
+    parent.id()
 }
 
 pub fn is_offset_inside_manipulator(offset: Vec2) -> bool {

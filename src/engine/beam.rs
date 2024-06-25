@@ -3,25 +3,22 @@ use std::time::Duration;
 use bevy::app::{FixedPostUpdate, FixedUpdate, Plugin};
 use bevy::ecs::bundle::Bundle;
 use bevy::ecs::component::Component;
-use bevy::ecs::entity::Entity;
 use bevy::ecs::event::{Event, EventReader};
 use bevy::ecs::schedule::{IntoSystemConfigs, SystemSet};
 use bevy::ecs::system::{Query, Res};
-use bevy::hierarchy::{BuildChildren, ChildBuilder, Children, HierarchyQueryExt, Parent};
+use bevy::hierarchy::{ChildBuilder, Children, Parent};
 use bevy::math::Vec2;
-use bevy::prelude::SpatialBundle;
 use bevy::render::color::Color;
 use bevy::render::view::Visibility;
 use bevy::sprite::{Anchor, Sprite, SpriteBundle};
+use bevy::time::Time;
 use bevy::transform::components::Transform;
-use bevy_tweening::lens::{SpriteColorLens, TransformScaleLens};
-use bevy_tweening::{Animator, AnimatorState, Delay, EaseFunction, Tween};
+use interpolation::{Ease, Lerp};
 
 use crate::model::{
     BeamTarget, BeamTargetKind, Board, BoardCoords, Direction, Emitters, GridSet, Piece,
 };
 
-use super::animation::AnimationBundle;
 use super::board::BoardResource;
 use super::border::{BORDER_OFFSET_X, BORDER_OFFSET_Y};
 use super::{BoardCoordsHolder, MOVE_DURATION, TILE_HEIGHT, TILE_WIDTH};
@@ -43,12 +40,31 @@ enum BeamGroup {
     Future,
 }
 
+#[derive(Component, Debug, Default)]
+struct BeamAnimator {
+    animation: BeamAnimation,
+    played_duration: Duration,
+    total_duration: Duration,
+}
+
+#[derive(Debug)]
+enum BeamAnimation {
+    None,
+    Resize { start: Vec2, end: Vec2 },
+    Fade { start: f32, end: f32 },
+}
+
+impl Default for BeamAnimation {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
 #[derive(Bundle)]
 pub struct BeamBundle {
     beam: Beam,
     sprite: SpriteBundle,
-    xform_animator: Animator<Transform>,
-    alpha_animator: Animator<Sprite>,
+    animator: BeamAnimator,
 }
 
 #[derive(Event)]
@@ -74,21 +90,6 @@ impl BeamBundle {
             Direction::Right => Anchor::CenterLeft,
         };
 
-        let mut xform_animator = Animator::new(Delay::new(Duration::from_nanos(1)));
-        xform_animator.state = AnimatorState::Paused;
-
-        let alpha_tween = Tween::new(
-            EaseFunction::SineInOut,
-            MOVE_DURATION * 3 / 5,
-            SpriteColorLens {
-                start: beam_color(group.alpha()),
-                end: beam_color(1.0 - group.alpha()),
-            },
-        );
-        let alpha_tween = Delay::new(MOVE_DURATION * 2 / 5).then(alpha_tween);
-        let mut alpha_animator = Animator::new(alpha_tween);
-        alpha_animator.state = AnimatorState::Paused;
-
         Self {
             beam: Beam { direction, group },
             sprite: SpriteBundle {
@@ -98,14 +99,14 @@ impl BeamBundle {
                     ..Default::default()
                 },
                 transform: Transform {
+                    translation: Vec2::ZERO.extend(REL_Z_LAYER),
                     scale: beam_scale(origin, direction, target).extend(1.0),
                     ..Default::default()
                 },
                 visibility: group.visibility(),
                 ..Default::default()
             },
-            xform_animator,
-            alpha_animator,
+            animator: BeamAnimator::default(),
         }
     }
 }
@@ -126,6 +127,14 @@ impl BeamGroup {
     }
 }
 
+impl BeamAnimator {
+    fn start_animation(&mut self, animation: BeamAnimation) {
+        self.animation = animation;
+        self.played_duration = Duration::ZERO;
+        self.total_duration = MOVE_DURATION;
+    }
+}
+
 pub fn spawn_beams(
     anchor: &mut ChildBuilder,
     origin: BoardCoords,
@@ -143,23 +152,11 @@ fn spawn_beam_group(
     board: &Board,
     group: BeamGroup,
 ) {
-    let mut beams = anchor.spawn((
-        SpatialBundle {
-            transform: Transform {
-                translation: Vec2::ZERO.extend(Z_LAYER),
-                ..Default::default()
-            },
-            ..Default::default()
-        },
-        AnimationBundle::new(anchor.parent_entity(), Z_LAYER),
-    ));
     let manipulator = board.pieces.get(origin).unwrap().as_manipulator().unwrap();
-    beams.with_children(|beams| {
-        for direction in emitters.directions() {
-            let target = manipulator.target(direction).unwrap();
-            beams.spawn(BeamBundle::new(origin, direction, target, group));
-        }
-    });
+    for direction in emitters.directions() {
+        let target = manipulator.target(direction).unwrap();
+        anchor.spawn(BeamBundle::new(origin, direction, target, group));
+    }
 }
 
 fn move_beams(
@@ -171,8 +168,7 @@ fn move_beams(
         &mut Transform,
         &mut Visibility,
         &mut Sprite,
-        &mut Animator<Transform>,
-        &mut Animator<Sprite>,
+        &mut BeamAnimator,
     )>,
 ) {
     enum BeamChange {
@@ -193,15 +189,9 @@ fn move_beams(
             false => coords,
             true => board.present.neighbor(coords, event.direction).unwrap(),
         };
-        for child in q_children.iter_descendants(anchor) {
-            let Ok((
-                beam,
-                mut xform,
-                mut visibility,
-                mut sprite,
-                mut xform_animator,
-                mut alpha_animator,
-            )) = q_beam.get_mut(child)
+        for &child in q_children.get(anchor).unwrap().iter() {
+            let Ok((beam, mut xform, mut visibility, mut sprite, mut animator)) =
+                q_beam.get_mut(child)
             else {
                 continue;
             };
@@ -215,6 +205,7 @@ fn move_beams(
                 .unwrap()
                 .target(beam.direction)
                 .unwrap();
+            let present_scale = xform.scale.truncate();
             let future_scale = beam_scale(future_origin, beam.direction, target);
             let beam_change = if future_scale == xform.scale.truncate() {
                 BeamChange::None
@@ -228,16 +219,10 @@ fn move_beams(
                 BeamChange::None => (),
                 BeamChange::Resize => {
                     if let BeamGroup::Present = beam.group {
-                        let tween = Tween::new(
-                            EaseFunction::SineInOut,
-                            MOVE_DURATION,
-                            TransformScaleLens {
-                                start: xform.scale,
-                                end: future_scale.extend(1.0),
-                            },
-                        );
-                        xform_animator.set_tweenable(tween);
-                        xform_animator.state = AnimatorState::Playing;
+                        animator.start_animation(BeamAnimation::Resize {
+                            start: present_scale,
+                            end: future_scale,
+                        });
                     }
                 }
                 BeamChange::Crossfade => {
@@ -250,8 +235,10 @@ fn move_beams(
                         *visibility = Visibility::Inherited;
                     }
                     if future_grows == is_future {
-                        alpha_animator.tweenable_mut().rewind();
-                        alpha_animator.state = AnimatorState::Playing;
+                        animator.start_animation(BeamAnimation::Fade {
+                            start: beam.group.alpha(),
+                            end: 1.0 - beam.group.alpha(),
+                        });
                     } else {
                         sprite.color = beam_color(1.0);
                     }
@@ -261,32 +248,50 @@ fn move_beams(
     }
 }
 
+fn animate_beams(
+    time: Res<Time>,
+    mut q_beam: Query<(&mut BeamAnimator, &mut Transform, &mut Sprite)>,
+) {
+    for (mut animator, mut xform, mut sprite) in q_beam.iter_mut() {
+        if let BeamAnimation::None = animator.animation {
+            continue;
+        }
+        animator.played_duration += time.delta();
+        let finished = animator.played_duration >= animator.total_duration;
+        if finished {
+            animator.played_duration = animator.total_duration;
+        }
+        let progress =
+            animator.played_duration.as_secs_f32() / animator.total_duration.as_secs_f32();
+        match &animator.animation {
+            BeamAnimation::None => unreachable!(),
+            BeamAnimation::Resize { start, end } => {
+                xform.scale = start.lerp(*end, progress.sine_in_out()).extend(1.0);
+            }
+            BeamAnimation::Fade { start, end } => {
+                let progress = (progress - 0.4).clamp(0.0, 1.0) / 0.6;
+                let alpha = start.lerp(end, &progress.sine_in_out());
+                sprite.color = beam_color(alpha);
+            }
+        }
+        if finished {
+            animator.animation = BeamAnimation::None;
+        }
+    }
+}
+
 fn reset_beams(
     mut events: EventReader<ResetBeams>,
     board: Res<BoardResource>,
-    mut q_beam: Query<(
-        Entity,
-        &Beam,
-        &mut Sprite,
-        &mut Transform,
-        &mut Visibility,
-        &mut Animator<Sprite>,
-    )>,
-    q_parent: Query<&Parent>,
+    mut q_beam: Query<(&Beam, &mut Sprite, &mut Transform, &mut Visibility, &Parent)>,
     q_origin: Query<&BoardCoordsHolder>,
 ) {
     if events.is_empty() {
         return;
     }
     events.clear();
-    for (beam_id, beam, mut sprite, mut xform, mut visibility, mut alpha_animator) in
-        q_beam.iter_mut()
-    {
-        let origin = q_parent
-            .iter_ancestors(beam_id)
-            .find_map(|id| q_origin.get(id).ok())
-            .unwrap()
-            .0;
+    for (beam, mut sprite, mut xform, mut visibility, parent) in q_beam.iter_mut() {
+        let origin = q_origin.get(parent.get()).unwrap().0;
         let target = board
             .present
             .pieces
@@ -298,7 +303,6 @@ fn reset_beams(
             .unwrap();
         xform.scale = beam_scale(origin, beam.direction, target).extend(1.0);
         *visibility = beam.group.visibility();
-        alpha_animator.stop();
         sprite.color = beam_color(beam.group.alpha());
     }
 }
@@ -332,9 +336,12 @@ impl Plugin for BeamPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         app.add_event::<MoveBeams>()
             .add_event::<ResetBeams>()
-            .add_systems(FixedUpdate, move_beams.in_set(BeamSet))
+            .add_systems(
+                FixedUpdate,
+                (move_beams, animate_beams).chain().in_set(BeamSet),
+            )
             .add_systems(FixedPostUpdate, reset_beams.in_set(BeamSet));
     }
 }
 
-const Z_LAYER: f32 = 1.0;
+const REL_Z_LAYER: f32 = -1.0;

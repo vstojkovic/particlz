@@ -6,21 +6,19 @@ use bevy::ecs::system::{Commands, Res, ResMut};
 use bevy::prelude::*;
 use bevy::window::{Window, WindowPlugin};
 use bevy::DefaultPlugins;
-use engine::animation::MoveRole;
-use model::Piece;
 
 mod engine;
 mod model;
 
 use self::engine::animation::{
-    Animation, AnimationFinished, AnimationPlugin, AnimationSet, StartAnimation,
+    Animation, AnimationFinished, AnimationPlugin, AnimationSet, Movement, StartAnimation,
 };
 use self::engine::beam::{BeamPlugin, BeamSet, MoveBeams, ResetBeams};
 use self::engine::board::BoardResource;
 use self::engine::focus::{get_focus, Focus, FocusPlugin, UpdateFocusEvent};
 use self::engine::input::{InputPlugin, MoveManipulatorEvent, SelectManipulatorEvent};
 use self::engine::{Assets, BoardCoordsHolder};
-use self::model::{Board, Border, Emitters, Manipulator, Particle, Tile, TileKind, Tint};
+use self::model::{Board, Border, Emitters, Manipulator, Particle, Piece, Tile, TileKind, Tint};
 
 fn main() {
     let board = if let Some(code) = std::env::args().nth(1) {
@@ -98,25 +96,22 @@ fn move_manipulator(
     let Some(event) = ev_move_manipulator.read().last() else {
         return;
     };
-    let Some(leader_coords) = focus.coords() else {
+    let Some(leader) = focus.coords() else {
         warn!("Received {:?} without a selected manipulator", event);
         return;
     };
 
     let direction = event.0;
 
-    let move_set = board.present.compute_move_set(leader_coords, direction);
+    let move_set = board.present.compute_move_set(leader, direction);
     board.future.move_pieces(&move_set, direction);
     board.future.retarget_beams();
 
-    for coords in move_set.iter() {
-        let anchor_id = *board.pieces.get(coords).unwrap();
-        let role = if coords == leader_coords { MoveRole::Leader } else { MoveRole::Dragged };
-        ev_start_animation.send(StartAnimation {
-            anchor: anchor_id,
-            animation: Animation::Movement(direction, role),
-        });
-    }
+    let movement = Movement { leader, direction };
+    ev_start_animation.send(StartAnimation(
+        Animation::Movement(movement),
+        move_set.clone(),
+    ));
     ev_move_beams.send(MoveBeams {
         move_set,
         direction,
@@ -129,38 +124,29 @@ fn finish_move(
     mut ev_retarget: EventWriter<ResetBeams>,
     mut ev_update_focus: EventWriter<UpdateFocusEvent>,
     mut board: ResMut<BoardResource>,
-    mut anchor: Query<(&mut BoardCoordsHolder, &mut Transform), Without<Focus>>,
+    mut q_piece: Query<(&mut BoardCoordsHolder, &mut Transform), Without<Focus>>,
 ) {
-    if ev_animation.is_empty() {
+    let Some(AnimationFinished(animation, pieces)) = ev_animation.read().last() else {
         return;
-    }
+    };
 
     board.update_present();
 
-    for event in ev_animation.read() {
-        match event.animation {
-            Animation::Idle => unreachable!(),
-            Animation::Movement(direction, role) => {
-                let (coords, _) = anchor.get_mut(event.anchor).unwrap();
-                let from_coords = coords.0;
-                let to_coords = board.present.neighbor(from_coords, direction).unwrap();
-                if let Some(entity) = board.pieces.get(from_coords) {
-                    if *entity == event.anchor {
-                        board.pieces.set(from_coords, None);
-                    }
-                }
-                board.move_piece(
-                    event.anchor,
-                    to_coords,
-                    &mut anchor.transmute_lens().query(),
-                );
-                if let MoveRole::Leader = role {
-                    ev_update_focus.send(UpdateFocusEvent(Focus::Selected(
-                        to_coords,
-                        board.present.compute_allowed_moves(to_coords),
-                    )));
-                }
-            }
+    match animation {
+        Animation::Movement(movement) => {
+            board.move_pieces(
+                pieces,
+                movement.direction,
+                &mut q_piece.transmute_lens().query(),
+            );
+            let to_coords = board
+                .present
+                .neighbor(movement.leader, movement.direction)
+                .unwrap();
+            ev_update_focus.send(UpdateFocusEvent(Focus::Selected(
+                to_coords,
+                board.present.compute_allowed_moves(to_coords),
+            )));
         }
     }
     ev_retarget.send(ResetBeams);

@@ -3,7 +3,7 @@ use std::ops::{Deref, DerefMut};
 
 use smallvec::{smallvec, SmallVec};
 
-use super::{BoardCoords, Dimensions, MAX_BOARD_COLS, MAX_BOARD_ROWS};
+use super::{BoardCoords, Dimensions, Direction, MAX_BOARD_COLS, MAX_BOARD_ROWS};
 
 const MAX_CAPACITY: usize = (MAX_BOARD_ROWS + 1) * (MAX_BOARD_COLS * 1);
 
@@ -17,6 +17,7 @@ pub struct GridMap<T: Clone> {
     cells: SmallVec<[Option<T>; MAX_CAPACITY]>,
 }
 
+#[derive(Clone)]
 pub struct GridSet {
     dims: Dimensions,
     masks: SmallVec<[u8; MAX_CAPACITY / 8]>,
@@ -107,6 +108,13 @@ impl GridSet {
 
     pub fn iter(&self) -> impl DoubleEndedIterator<Item = BoardCoords> + '_ {
         self.dims.iter().filter(|&coords| self.contains(coords))
+    }
+
+    pub fn for_each(&self, direction: Direction, func: impl FnMut(BoardCoords)) {
+        match direction {
+            Direction::Up | Direction::Left => self.iter().for_each(func),
+            Direction::Down | Direction::Right => self.iter().rev().for_each(func),
+        }
     }
 }
 

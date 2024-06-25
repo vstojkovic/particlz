@@ -1,179 +1,136 @@
 use std::time::Duration;
 
-use bevy::app::{FixedUpdate, Plugin};
-use bevy::ecs::bundle::Bundle;
-use bevy::ecs::component::Component;
-use bevy::ecs::entity::Entity;
-use bevy::ecs::event::{Event, EventReader, EventWriter};
-use bevy::ecs::schedule::{IntoSystemConfigs, SystemSet};
-use bevy::ecs::system::Query;
-use bevy::hierarchy::Children;
 use bevy::math::Vec2;
-use bevy::sprite::Sprite;
+use bevy::prelude::*;
 use bevy::transform::components::Transform;
-use bevy_tweening::lens::TransformPositionLens;
-use bevy_tweening::{
-    component_animator_system, Animator, EaseFunction, EaseMethod, Sequence, Tween, TweenCompleted,
-    Tweenable,
-};
-use strum::{EnumCount, IntoEnumIterator};
+use interpolation::Ease;
 
-use crate::model::Direction;
+use crate::model::{BoardCoords, Direction, GridSet};
 
-use super::{MOVE_DURATION, TILE_HEIGHT, TILE_WIDTH};
+use super::{BoardCoordsHolder, EngineCoords, EngineDirection, MOVE_DURATION};
 
 pub struct AnimationPlugin;
+
+#[derive(Debug, Clone)]
+pub enum Animation {
+    Movement(Movement),
+}
 
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AnimationSet;
 
-#[derive(Component, Debug, Clone, Copy)]
-pub enum Animation {
-    Idle,
-    Movement(Direction, MoveRole),
+#[derive(Debug, Clone)]
+pub struct Movement {
+    pub leader: BoardCoords,
+    pub direction: Direction,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum MoveRole {
-    Leader,
-    Dragged,
-}
-
-#[derive(Event, Debug)]
-pub struct StartAnimation {
-    pub anchor: Entity,
-    pub animation: Animation,
-}
-
-#[derive(Event, Debug)]
-pub struct AnimationFinished {
-    pub anchor: Entity,
-    pub animation: Animation,
-}
-
-#[derive(Bundle)]
-pub(super) struct AnimationAnchorBundle {
+#[derive(Resource, Debug)]
+pub struct AnimationState {
     animation: Animation,
+    pieces: GridSet,
+    played_duration: Duration,
+    total_duration: Duration,
 }
 
-#[derive(Bundle)]
-pub(super) struct AnimationBundle {
-    xform_animator: Animator<Transform>,
+#[derive(Resource, Debug, Default)]
+pub struct AnimationStateHolder(Option<AnimationState>);
+
+#[derive(Event, Debug)]
+pub struct StartAnimation(pub Animation, pub GridSet);
+
+#[derive(Event, Debug)]
+pub struct AnimationFinished(pub Animation, pub GridSet);
+
+#[derive(Component, Default)]
+pub struct MovementAnimator {
+    is_moving: bool,
+    start: Vec2,
+    end: Vec2,
 }
 
-impl Animation {
-    fn start(self, animator: &mut Animator<Transform>) {
-        let tweenable = animator.tweenable_mut();
-        match self {
-            Self::Idle => tweenable.set_progress(1.0),
-            Self::Movement(direction, _) => {
-                tweenable.set_elapsed(MOVE_DURATION * (direction as isize as u32))
+#[derive(Bundle, Default)]
+pub struct AnimationBundle {
+    animator: MovementAnimator,
+}
+
+fn start_animation(
+    mut ev_start_animation: EventReader<StartAnimation>,
+    mut state: ResMut<AnimationStateHolder>,
+    mut q_animator: Query<(&BoardCoordsHolder, &mut MovementAnimator)>,
+) {
+    let Some(StartAnimation(animation, pieces)) = ev_start_animation.read().last() else {
+        return;
+    };
+    let total_duration = match animation {
+        Animation::Movement(_) => MOVE_DURATION,
+    };
+    state.0 = Some(AnimationState {
+        animation: animation.clone(),
+        pieces: pieces.clone(),
+        played_duration: Duration::ZERO,
+        total_duration,
+    });
+    match animation {
+        Animation::Movement(movement) => {
+            for (coords, mut animator) in q_animator.iter_mut() {
+                if !pieces.contains(coords.0) {
+                    continue;
+                }
+                animator.start = coords.to_xy();
+                animator.end = animator.start + movement.direction.delta();
+                animator.is_moving = true;
             }
         }
     }
 }
 
-impl AnimationAnchorBundle {
-    pub fn new() -> Self {
-        Self {
-            animation: Animation::Idle,
-        }
-    }
-}
-
-impl AnimationBundle {
-    pub fn new(anchor: Entity, z: f32) -> Self {
-        let mut sequence = Sequence::with_capacity(Direction::COUNT);
-        for direction in Direction::iter() {
-            let end = match direction {
-                Direction::Up => Vec2::new(0.0, TILE_HEIGHT),
-                Direction::Left => Vec2::new(-TILE_WIDTH, 0.0),
-                Direction::Down => Vec2::new(0.0, -TILE_HEIGHT),
-                Direction::Right => Vec2::new(TILE_WIDTH, 0.0),
-            };
-            let tween = Tween::new(
-                EaseFunction::SineInOut,
-                MOVE_DURATION,
-                TransformPositionLens {
-                    start: Vec2::ZERO.extend(z),
-                    end: end.extend(z),
-                },
-            );
-            let tween = tween.with_completed_event(anchor.to_bits());
-            sequence = sequence.then(tween);
-        }
-        sequence = sequence.then(Tween::new(
-            EaseMethod::Linear,
-            Duration::from_nanos(1),
-            TransformPositionLens {
-                start: Vec2::ZERO.extend(z),
-                end: Vec2::ZERO.extend(z),
-            },
-        ));
-        sequence.set_progress(1.0);
-        let xform_animator = Animator::new(sequence);
-        Self { xform_animator }
-    }
-}
-
-fn set_animation(
-    anchor: Entity,
-    animation: Animation,
-    q_anchor: &mut Query<(&mut Animation, &Children)>,
-    q_animator: &mut Query<&mut Animator<Transform>>,
+fn animate_movement(
+    mut ev_animation_finished: EventWriter<AnimationFinished>,
+    time: Res<Time>,
+    mut state_holder: ResMut<AnimationStateHolder>,
+    mut q_animator: Query<(&mut MovementAnimator, &mut Transform)>,
 ) {
-    let (mut anchor_animation, children) = q_anchor.get_mut(anchor).unwrap();
-    *anchor_animation = animation;
-    for &child in children.iter() {
-        animation.start(&mut *q_animator.get_mut(child).unwrap());
-    }
-}
+    let Some(state) = state_holder.0.as_mut() else {
+        return;
+    };
+    let Animation::Movement(_) = state.animation else {
+        return;
+    };
 
-fn start_animation(
-    mut ev_start_animation: EventReader<StartAnimation>,
-    mut q_anchor: Query<(&mut Animation, &Children)>,
-    mut q_animator: Query<&mut Animator<Transform>>,
-) {
-    for StartAnimation { anchor, animation } in ev_start_animation.read() {
-        set_animation(*anchor, *animation, &mut q_anchor, &mut q_animator);
+    state.played_duration += time.delta();
+    let finished = state.played_duration >= state.total_duration;
+    if finished {
+        state.played_duration = state.total_duration;
     }
-}
+    let progress = state.played_duration.as_secs_f32() / state.total_duration.as_secs_f32();
 
-fn finish_animation(
-    mut ev_tweens: EventReader<TweenCompleted>,
-    mut ev_animation: EventWriter<AnimationFinished>,
-    mut q_anchor: Query<(&mut Animation, &Children)>,
-    mut q_animator: Query<&mut Animator<Transform>>,
-) {
-    for event in ev_tweens.read() {
-        let anchor = Entity::from_bits(event.user_data);
-        let (&animation, _) = q_anchor.get(anchor).unwrap();
-        if let Animation::Idle = animation {
-            // we've already processed this anchor
+    for (mut animator, mut xform) in q_animator.iter_mut() {
+        if !animator.is_moving {
             continue;
         }
-        set_animation(anchor, Animation::Idle, &mut q_anchor, &mut q_animator);
-        ev_animation.send(AnimationFinished { anchor, animation });
+        let z_layer = xform.translation.z;
+        let position = animator.start.lerp(animator.end, progress.sine_in_out());
+        xform.translation = position.extend(z_layer);
+        animator.is_moving = !finished;
+    }
+
+    if finished {
+        let state = state_holder.0.take().unwrap();
+        ev_animation_finished.send(AnimationFinished(state.animation, state.pieces));
     }
 }
 
 impl Plugin for AnimationPlugin {
-    fn build(&self, app: &mut bevy::prelude::App) {
-        let xform_tween_system = component_animator_system::<Transform>;
-        let alpha_tween_system = component_animator_system::<Sprite>; // TODO: This should go into beam mod
-        app.add_event::<TweenCompleted>()
+    fn build(&self, app: &mut App) {
+        app.insert_resource(AnimationStateHolder::default())
             .add_event::<StartAnimation>()
             .add_event::<AnimationFinished>()
             .add_systems(
                 FixedUpdate,
-                (
-                    start_animation.in_set(AnimationSet),
-                    xform_tween_system.after(start_animation),
-                    alpha_tween_system,
-                    finish_animation
-                        .after(xform_tween_system)
-                        .in_set(AnimationSet),
-                ),
+                (start_animation, animate_movement)
+                    .chain()
+                    .in_set(AnimationSet),
             );
     }
 }

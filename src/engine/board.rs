@@ -6,7 +6,7 @@ use bevy::math::Vec2;
 use bevy::prelude::SpatialBundle;
 use bevy::transform::components::Transform;
 
-use crate::model::{Board, BoardCoords, GridMap, Piece};
+use crate::model::{Board, BoardCoords, Direction, GridMap, GridSet, Piece};
 
 use super::border::{spawn_horz_border, spawn_vert_border};
 use super::focus::spawn_focus;
@@ -116,14 +116,27 @@ impl BoardResource {
 
     pub fn move_piece(
         &mut self,
-        anchor: Entity,
+        from_coords: BoardCoords,
         to_coords: BoardCoords,
-        q_anchor: &mut Query<(&mut BoardCoordsHolder, &mut Transform)>,
+        q_piece: &mut Query<(&mut BoardCoordsHolder, &mut Transform)>,
     ) {
-        self.pieces.set(to_coords, anchor);
+        let entity = self.pieces.take(from_coords).unwrap();
+        self.pieces.set(to_coords, entity);
 
-        let (mut anchor_coords, mut anchor_xform) = q_anchor.get_mut(anchor).unwrap();
-        anchor_coords.0 = to_coords;
-        anchor_xform.translation = to_coords.to_xy().extend(anchor_xform.translation.z);
+        let (mut coords, mut xform) = q_piece.get_mut(entity).unwrap();
+        coords.0 = to_coords;
+        xform.translation = to_coords.to_xy().extend(xform.translation.z);
+    }
+
+    pub fn move_pieces(
+        &mut self,
+        move_set: &GridSet,
+        direction: Direction,
+        q_piece: &mut Query<(&mut BoardCoordsHolder, &mut Transform)>,
+    ) {
+        move_set.for_each(direction, |from_coords| {
+            let to_coords = self.present.neighbor(from_coords, direction).unwrap();
+            self.move_piece(from_coords, to_coords, q_piece);
+        });
     }
 }

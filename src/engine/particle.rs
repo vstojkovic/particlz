@@ -3,9 +3,7 @@ use std::collections::HashMap;
 use bevy::asset::{AssetServer, Handle};
 use bevy::ecs::bundle::Bundle;
 use bevy::ecs::entity::Entity;
-use bevy::hierarchy::{BuildChildren, ChildBuilder};
-use bevy::math::Vec2;
-use bevy::prelude::SpatialBundle;
+use bevy::hierarchy::ChildBuilder;
 use bevy::render::texture::Image;
 use bevy::sprite::SpriteBundle;
 use bevy::transform::components::Transform;
@@ -13,7 +11,7 @@ use strum::IntoEnumIterator;
 
 use crate::model::{BoardCoords, Particle, Tint};
 
-use super::animation::{AnimationAnchorBundle, AnimationBundle};
+use super::animation::AnimationBundle;
 use super::{BoardCoordsHolder, EngineCoords};
 
 pub struct ParticleAssets {
@@ -21,14 +19,8 @@ pub struct ParticleAssets {
 }
 
 #[derive(Bundle)]
-struct ParticleAnchorBundle {
-    coords: BoardCoordsHolder,
-    spatial: SpatialBundle,
-    animation: AnimationAnchorBundle,
-}
-
-#[derive(Bundle)]
 struct ParticleBundle {
+    coords: BoardCoordsHolder,
     sprite: SpriteBundle,
     animation: AnimationBundle,
 }
@@ -49,36 +41,21 @@ impl ParticleAssets {
     }
 }
 
-impl ParticleAnchorBundle {
-    fn new(coords: BoardCoords) -> Self {
-        let coords = BoardCoordsHolder(coords);
-        Self {
-            coords,
-            spatial: SpatialBundle {
-                transform: Transform {
-                    translation: coords.to_xy().extend(0.0),
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-            animation: AnimationAnchorBundle::new(),
-        }
-    }
-}
-
 impl ParticleBundle {
-    fn new(particle: &Particle, anchor: Entity, assets: &ParticleAssets) -> Self {
+    fn new(coords: BoardCoords, particle: &Particle, assets: &ParticleAssets) -> Self {
+        let coords = BoardCoordsHolder(coords);
         let texture = assets.textures[&particle.tint].clone();
         Self {
+            coords,
             sprite: SpriteBundle {
                 texture,
                 transform: Transform {
-                    translation: Vec2::ZERO.extend(Z_LAYER),
+                    translation: coords.to_xy().extend(Z_LAYER),
                     ..Default::default()
                 },
                 ..Default::default()
             },
-            animation: AnimationBundle::new(anchor, Z_LAYER),
+            animation: AnimationBundle::default(),
         }
     }
 }
@@ -89,15 +66,9 @@ pub fn spawn_particle(
     coords: BoardCoords,
     assets: &ParticleAssets,
 ) -> Entity {
-    let mut anchor = parent.spawn(ParticleAnchorBundle::new(coords));
-    anchor.with_children(|anchor| {
-        anchor.spawn(ParticleBundle::new(
-            particle,
-            anchor.parent_entity(),
-            assets,
-        ));
-    });
-    anchor.id()
+    parent
+        .spawn(ParticleBundle::new(coords, particle, assets))
+        .id()
 }
 
 const Z_LAYER: f32 = 2.0;

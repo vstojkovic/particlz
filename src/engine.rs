@@ -17,7 +17,7 @@ pub mod manipulator;
 pub mod particle;
 pub mod tile;
 
-use crate::model::BoardCoords;
+use crate::model::{BoardCoords, Direction};
 
 use self::border::BorderAssets;
 use self::focus::FocusAssets;
@@ -84,5 +84,20 @@ impl EngineCoords for BoardCoordsHolder {
 
     fn to_xy(self) -> Vec2 {
         self.0.to_xy()
+    }
+}
+
+trait EngineDirection {
+    fn delta(self) -> Vec2;
+}
+
+impl EngineDirection for Direction {
+    fn delta(self) -> Vec2 {
+        match self {
+            Self::Up => Vec2::new(0.0, TILE_HEIGHT),
+            Self::Left => Vec2::new(-TILE_WIDTH, 0.0),
+            Self::Down => Vec2::new(0.0, -TILE_HEIGHT),
+            Self::Right => Vec2::new(TILE_WIDTH, 0.0),
+        }
     }
 }

@@ -188,10 +188,10 @@ impl Board {
     }
 
     pub fn move_pieces(&mut self, move_set: &GridSet, direction: Direction) {
-        match direction {
-            Direction::Up | Direction::Left => self.iter_move(move_set.iter(), direction),
-            Direction::Down | Direction::Right => self.iter_move(move_set.iter().rev(), direction),
-        }
+        move_set.for_each(direction, |from_coords| {
+            let to_coords = self.neighbor(from_coords, direction).unwrap();
+            self.move_piece(from_coords, to_coords);
+        });
     }
 
     pub fn retarget_beams(&mut self) {
@@ -288,13 +288,6 @@ impl Board {
             if self.pieces.get(piece_coords).is_some() {
                 return BeamTarget::piece(piece_coords);
             }
-        }
-    }
-
-    fn iter_move<I: Iterator<Item = BoardCoords>>(&mut self, iter: I, direction: Direction) {
-        for from_coords in iter {
-            let to_coords = self.neighbor(from_coords, direction).unwrap();
-            self.move_piece(from_coords, to_coords);
         }
     }
 }
