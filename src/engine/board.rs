@@ -1,7 +1,7 @@
 use bevy::ecs::bundle::Bundle;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::system::{Commands, Query, Resource};
-use bevy::hierarchy::BuildChildren;
+use bevy::hierarchy::{BuildChildren, DespawnRecursiveExt};
 use bevy::math::Vec2;
 use bevy::prelude::SpatialBundle;
 use bevy::transform::components::Transform;
@@ -138,5 +138,12 @@ impl BoardResource {
             let to_coords = self.present.neighbor(from_coords, direction).unwrap();
             self.move_piece(from_coords, to_coords, q_piece);
         });
+    }
+
+    pub fn remove_piece(&mut self, coords: BoardCoords, commands: &mut Commands) {
+        self.present.remove_piece(coords);
+        self.future.remove_piece(coords);
+        let entity = self.pieces.take(coords).unwrap();
+        commands.entity(entity).despawn_recursive();
     }
 }

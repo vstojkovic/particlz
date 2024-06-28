@@ -8,6 +8,7 @@ use bevy::ecs::schedule::{IntoSystemConfigs, SystemSet};
 use bevy::ecs::system::{Query, Res};
 use bevy::hierarchy::{ChildBuilder, Children, Parent};
 use bevy::math::Vec2;
+use bevy::prelude::Without;
 use bevy::render::color::Color;
 use bevy::render::view::Visibility;
 use bevy::sprite::{Anchor, Sprite, SpriteBundle};
@@ -19,6 +20,7 @@ use crate::model::{
     BeamTarget, BeamTargetKind, Board, BoardCoords, Direction, Emitters, GridSet, Piece,
 };
 
+use super::animation::FadeOutAnimator;
 use super::board::BoardResource;
 use super::border::{BORDER_OFFSET_X, BORDER_OFFSET_Y};
 use super::{BoardCoordsHolder, MOVE_DURATION, TILE_HEIGHT, TILE_WIDTH};
@@ -63,8 +65,10 @@ impl Default for BeamAnimation {
 #[derive(Bundle)]
 pub struct BeamBundle {
     beam: Beam,
+    coords: BoardCoordsHolder,
     sprite: SpriteBundle,
     animator: BeamAnimator,
+    fader: FadeOutAnimator,
 }
 
 #[derive(Event)]
@@ -92,6 +96,7 @@ impl BeamBundle {
 
         Self {
             beam: Beam { direction, group },
+            coords: BoardCoordsHolder(origin),
             sprite: SpriteBundle {
                 sprite: Sprite {
                     color: beam_color(group.alpha()),
@@ -107,6 +112,7 @@ impl BeamBundle {
                 ..Default::default()
             },
             animator: BeamAnimator::default(),
+            fader: FadeOutAnimator::default(),
         }
     }
 }
@@ -283,15 +289,24 @@ fn animate_beams(
 fn reset_beams(
     mut events: EventReader<ResetBeams>,
     board: Res<BoardResource>,
-    mut q_beam: Query<(&Beam, &mut Sprite, &mut Transform, &mut Visibility, &Parent)>,
-    q_origin: Query<&BoardCoordsHolder>,
+    mut q_beam: Query<(
+        &Beam,
+        &mut BoardCoordsHolder,
+        &mut Sprite,
+        &mut Transform,
+        &mut Visibility,
+        &Parent,
+    )>,
+    q_origin: Query<&BoardCoordsHolder, Without<Beam>>,
 ) {
     if events.is_empty() {
         return;
     }
     events.clear();
-    for (beam, mut sprite, mut xform, mut visibility, parent) in q_beam.iter_mut() {
+    for (beam, mut coords, mut sprite, mut xform, mut visibility, parent) in q_beam.iter_mut() {
         let origin = q_origin.get(parent.get()).unwrap().0;
+        coords.0 = origin;
+
         let target = board
             .present
             .pieces

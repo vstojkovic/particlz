@@ -51,8 +51,7 @@ impl<'b> MoveSolver<'b> {
                         return;
                     }
                     if let Some(manipulator) = get_manipulator(self.board, coords) {
-                        for direction in manipulator.emitters.directions() {
-                            let target = manipulator.target(direction).unwrap();
+                        for target in manipulator.iter_targets() {
                             if target.kind == BeamTargetKind::Piece {
                                 if let Some(target_ref_count) = self.graph.get_mut(target.coords) {
                                     *target_ref_count -= 1;
@@ -113,8 +112,7 @@ fn gather(board: &Board, coords: BoardCoords, graph: &mut GridMap<u8>, visited: 
     let mut visited = visited.scoped_insert(coords);
 
     if let Some(manipulator) = get_manipulator(board, coords) {
-        for direction in manipulator.emitters.directions() {
-            let target = manipulator.target(direction).unwrap();
+        for target in manipulator.iter_targets() {
             if target.kind == BeamTargetKind::Piece {
                 gather(board, target.coords, graph, &mut visited);
             }

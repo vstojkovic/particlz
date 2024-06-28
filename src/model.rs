@@ -12,6 +12,7 @@ use strum_macros::{EnumCount, EnumIter, FromRepr};
 mod grid;
 mod movement;
 mod pbc1;
+mod support;
 
 pub use pbc1::Pbc1DecodeError;
 
@@ -272,6 +273,14 @@ impl Board {
         None
     }
 
+    pub fn unsupported_pieces(&self) -> GridSet {
+        support::unsupported_pieces(self)
+    }
+
+    pub fn remove_piece(&mut self, coords: BoardCoords) {
+        self.pieces.take(coords);
+    }
+
     fn find_beam_target(&self, coords: BoardCoords, direction: Direction) -> BeamTarget {
         let mut piece_coords = coords;
         let border_orientation = direction.orientation().flip();
@@ -399,6 +408,13 @@ impl Manipulator {
 
     pub fn target(&self, direction: Direction) -> Option<BeamTarget> {
         self.targets[direction]
+    }
+
+    pub fn iter_targets(&self) -> impl Iterator<Item = BeamTarget> + '_ {
+        self.emitters
+            .directions()
+            .iter()
+            .map(|direction| self.targets[direction].unwrap())
     }
 }
 

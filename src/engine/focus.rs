@@ -27,7 +27,7 @@ pub struct FocusPlugin;
 pub enum Focus {
     None,
     Selected(BoardCoords, EnumSet<Direction>),
-    Busy,
+    Busy(Option<BoardCoords>),
 }
 
 #[derive(Event, Debug)]
@@ -54,9 +54,10 @@ struct FocusArrowBundle {
 }
 
 impl Focus {
-    pub fn coords(&self) -> Option<BoardCoords> {
+    pub fn coords(&self, include_busy: bool) -> Option<BoardCoords> {
         match self {
             Focus::Selected(coords, _) => Some(*coords),
+            Focus::Busy(coords) if include_busy => coords.clone(),
             _ => None,
         }
     }

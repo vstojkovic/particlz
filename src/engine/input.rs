@@ -48,7 +48,7 @@ fn process_keyboard_input(
         }
     }
 
-    if let Focus::Busy = focus {
+    if let Focus::Busy(_) = focus {
         return;
     }
 
@@ -100,7 +100,7 @@ fn process_mouse_input(
         }
     }
 
-    if let Focus::Busy = focus {
+    if let Focus::Busy(_) = focus {
         return;
     }
 

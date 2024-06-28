@@ -28,6 +28,12 @@ pub struct ScopedInsert<'s> {
     coords: BoardCoords,
 }
 
+pub struct GridQueue {
+    buffer: SmallVec<[BoardCoords; MAX_CAPACITY]>,
+    push_idx: usize,
+    pop_idx: Option<usize>,
+}
+
 impl<T: Clone> GridMap<T> {
     pub fn new(rows: usize, cols: usize) -> Self {
         let dims = Dimensions::new(rows, cols);
@@ -90,6 +96,10 @@ impl GridSet {
     pub fn contains(&self, coords: BoardCoords) -> bool {
         let idx = self.dims.index(coords);
         self.masks[idx / 8] & (1 << (idx % 8)) != 0
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.masks.iter().all(|mask| *mask == 0)
     }
 
     pub fn insert(&mut self, coords: BoardCoords) {
@@ -161,5 +171,44 @@ impl<'s> Deref for ScopedInsert<'s> {
 impl<'s> DerefMut for ScopedInsert<'s> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.set
+    }
+}
+
+impl GridQueue {
+    pub fn for_grid<G: Grid>(grid: &G) -> Self {
+        let buffer = smallvec![BoardCoords::default(); grid.dims().rows * grid.dims().cols];
+        Self {
+            buffer,
+            push_idx: 0,
+            pop_idx: None,
+        }
+    }
+
+    pub fn push(&mut self, coords: BoardCoords) {
+        assert!(self.pop_idx != Some(self.push_idx));
+        self.buffer[self.push_idx] = coords;
+        if self.pop_idx.is_none() {
+            self.pop_idx = Some(self.push_idx);
+        }
+        self.push_idx = self.wrap_inc(self.push_idx);
+    }
+
+    pub fn pop(&mut self) -> Option<BoardCoords> {
+        let Some(pop_idx) = self.pop_idx else {
+            return None;
+        };
+        let result = self.buffer[pop_idx];
+        let pop_idx = self.wrap_inc(pop_idx);
+        self.pop_idx = (pop_idx != self.push_idx).then(|| pop_idx);
+
+        Some(result)
+    }
+
+    fn wrap_inc(&self, mut idx: usize) -> usize {
+        idx += 1;
+        if idx == self.buffer.len() {
+            idx = 0;
+        }
+        idx
     }
 }
