@@ -13,8 +13,8 @@ use bevy::window::{PrimaryWindow, Window};
 
 use crate::model::{BoardCoords, Direction, Piece};
 
-use super::board::BoardResource;
 use super::focus::{focus_direction_for_offset, get_focus, Focus};
+use super::level::Level;
 use super::manipulator::is_offset_inside_manipulator;
 
 pub struct InputPlugin;
@@ -87,7 +87,7 @@ fn process_mouse_input(
     mut mouse_input: Local<ButtonInput<MouseButton>>,
     window: Query<&Window, With<PrimaryWindow>>,
     camera: Query<(&Camera, &GlobalTransform)>,
-    board: Res<BoardResource>,
+    level: Res<Level>,
     q_xform: Query<&Transform>,
     mut ev_select_manipulator: EventWriter<SelectManipulatorEvent>,
     mut ev_move_manipulator: EventWriter<MoveManipulatorEvent>,
@@ -110,7 +110,7 @@ fn process_mouse_input(
         let coords_and_offset = window
             .cursor_position()
             .and_then(|pos| camera.viewport_to_world_2d(xform, pos))
-            .and_then(|pos| board.coords_at_pos(pos, &q_xform));
+            .and_then(|pos| level.coords_at_pos(pos, &q_xform));
         if let Some((coords, offset)) = coords_and_offset {
             if let Focus::Selected(focus_coords, directions) = focus {
                 if coords == focus_coords {
@@ -122,7 +122,7 @@ fn process_mouse_input(
                     return;
                 }
             }
-            if let Some(Piece::Manipulator(_)) = board.present.pieces.get(coords) {
+            if let Some(Piece::Manipulator(_)) = level.present.pieces.get(coords) {
                 if is_offset_inside_manipulator(offset) {
                     ev_select_manipulator.send(SelectManipulatorEvent::AtCoords(coords));
                 }

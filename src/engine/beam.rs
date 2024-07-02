@@ -21,8 +21,8 @@ use crate::model::{
 };
 
 use super::animation::FadeOutAnimator;
-use super::board::BoardResource;
 use super::border::{BORDER_OFFSET_X, BORDER_OFFSET_Y};
+use super::level::Level;
 use super::{BoardCoordsHolder, MOVE_DURATION, TILE_HEIGHT, TILE_WIDTH};
 
 pub struct BeamPlugin;
@@ -167,7 +167,7 @@ fn spawn_beam_group(
 
 fn move_beams(
     mut events: EventReader<MoveBeams>,
-    board: Res<BoardResource>,
+    level: Res<Level>,
     q_children: Query<&Children>,
     mut q_beam: Query<(
         &Beam,
@@ -186,14 +186,14 @@ fn move_beams(
     let Some(event) = events.read().last() else {
         return;
     };
-    for (coords, piece) in board.present.pieces.iter() {
+    for (coords, piece) in level.present.pieces.iter() {
         let Piece::Manipulator(_) = piece else {
             continue;
         };
-        let anchor = *board.pieces.get(coords).unwrap();
+        let anchor = *level.pieces.get(coords).unwrap();
         let future_origin = match event.move_set.contains(coords) {
             false => coords,
-            true => board.present.neighbor(coords, event.direction).unwrap(),
+            true => level.present.neighbor(coords, event.direction).unwrap(),
         };
         for &child in q_children.get(anchor).unwrap().iter() {
             let Ok((beam, mut xform, mut visibility, mut sprite, mut animator)) =
@@ -202,7 +202,7 @@ fn move_beams(
                 continue;
             };
 
-            let target = board
+            let target = level
                 .future
                 .pieces
                 .get(future_origin)
@@ -288,7 +288,7 @@ fn animate_beams(
 
 fn reset_beams(
     mut events: EventReader<ResetBeams>,
-    board: Res<BoardResource>,
+    level: Res<Level>,
     mut q_beam: Query<(
         &Beam,
         &mut BoardCoordsHolder,
@@ -307,7 +307,7 @@ fn reset_beams(
         let origin = q_origin.get(parent.get()).unwrap().0;
         coords.0 = origin;
 
-        let target = board
+        let target = level
             .present
             .pieces
             .get(origin)

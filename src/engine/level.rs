@@ -16,7 +16,7 @@ use super::tile::spawn_tile;
 use super::{Assets, BoardCoordsHolder, EngineCoords};
 
 #[derive(Resource)]
-pub struct BoardResource {
+pub struct Level {
     pub present: Board,
     pub future: Board,
     pub parent: Entity,
@@ -31,7 +31,7 @@ struct BoardBundle {
     spatial: SpatialBundle,
 }
 
-impl BoardResource {
+impl Level {
     pub fn new(board: Board) -> Self {
         let present = board;
         let future = present.clone();

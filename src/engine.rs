@@ -9,10 +9,10 @@ use bevy::math::Vec2;
 
 pub mod animation;
 pub mod beam;
-pub mod board;
 pub mod border;
 pub mod focus;
 pub mod input;
+pub mod level;
 pub mod manipulator;
 pub mod particle;
 pub mod tile;

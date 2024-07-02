@@ -14,9 +14,9 @@ use self::engine::animation::{
     Animation, AnimationFinished, AnimationPlugin, AnimationSet, Movement, StartAnimation,
 };
 use self::engine::beam::{BeamPlugin, BeamSet, MoveBeams, ResetBeams};
-use self::engine::board::BoardResource;
 use self::engine::focus::{get_focus, Focus, FocusPlugin, UpdateFocusEvent};
 use self::engine::input::{InputPlugin, MoveManipulatorEvent, SelectManipulatorEvent};
+use self::engine::level::Level;
 use self::engine::{Assets, BoardCoordsHolder};
 use self::model::{Board, Border, Emitters, Manipulator, Particle, Piece, Tile, TileKind, Tint};
 
@@ -38,7 +38,7 @@ fn main() {
         .add_plugins(AnimationPlugin)
         .add_plugins(FocusPlugin)
         .add_plugins(BeamPlugin)
-        .insert_resource(BoardResource::new(board))
+        .insert_resource(Level::new(board))
         .add_systems(Startup, (load_assets, setup_board).chain())
         .add_systems(
             FixedUpdate,
@@ -58,29 +58,29 @@ fn load_assets(mut commands: Commands, server: Res<AssetServer>) {
     commands.insert_resource(Assets::load(&server));
 }
 
-fn setup_board(mut commands: Commands, mut board: ResMut<BoardResource>, assets: Res<Assets>) {
+fn setup_board(mut commands: Commands, mut level: ResMut<Level>, assets: Res<Assets>) {
     commands.spawn(Camera2dBundle::default());
-    board.spawn(&mut commands, &assets);
+    level.spawn(&mut commands, &assets);
 }
 
 fn select_manipulator(
     focus: In<Focus>,
     mut ev_select_manipulator: EventReader<SelectManipulatorEvent>,
     mut ev_update_focus: EventWriter<UpdateFocusEvent>,
-    board: Res<BoardResource>,
+    level: Res<Level>,
 ) {
     let Some(event) = ev_select_manipulator.read().last() else {
         return;
     };
     let coords = focus.coords(false);
     let coords = match event {
-        SelectManipulatorEvent::Previous => board.present.prev_manipulator(coords),
-        SelectManipulatorEvent::Next => board.present.next_manipulator(coords),
+        SelectManipulatorEvent::Previous => level.present.prev_manipulator(coords),
+        SelectManipulatorEvent::Next => level.present.next_manipulator(coords),
         SelectManipulatorEvent::AtCoords(coords) => Some(*coords),
         SelectManipulatorEvent::Deselect => None,
     };
     let new_focus = coords
-        .map(|coords| Focus::Selected(coords, board.present.compute_allowed_moves(coords)))
+        .map(|coords| Focus::Selected(coords, level.present.compute_allowed_moves(coords)))
         .unwrap_or(Focus::None);
     ev_update_focus.send(UpdateFocusEvent(new_focus));
 }
@@ -91,7 +91,7 @@ fn move_manipulator(
     mut ev_start_animation: EventWriter<StartAnimation>,
     mut ev_move_beams: EventWriter<MoveBeams>,
     mut ev_update_focus: EventWriter<UpdateFocusEvent>,
-    mut board: ResMut<BoardResource>,
+    mut level: ResMut<Level>,
 ) {
     let Some(event) = ev_move_manipulator.read().last() else {
         return;
@@ -103,9 +103,9 @@ fn move_manipulator(
 
     let direction = event.0;
 
-    let move_set = board.present.compute_move_set(leader, direction);
-    board.future.move_pieces(&move_set, direction);
-    board.future.retarget_beams();
+    let move_set = level.present.compute_move_set(leader, direction);
+    level.future.move_pieces(&move_set, direction);
+    level.future.retarget_beams();
 
     let movement = Movement { leader, direction };
     ev_start_animation.send(StartAnimation(
@@ -125,7 +125,7 @@ fn finish_animation(
     mut ev_start_animation: EventWriter<StartAnimation>,
     mut ev_retarget: EventWriter<ResetBeams>,
     mut ev_update_focus: EventWriter<UpdateFocusEvent>,
-    mut board: ResMut<BoardResource>,
+    mut level: ResMut<Level>,
     mut commands: Commands,
     mut q_piece: Query<(&mut BoardCoordsHolder, &mut Transform), Without<Focus>>,
 ) {
@@ -133,26 +133,26 @@ fn finish_animation(
         return;
     };
 
-    board.update_present();
+    level.update_present();
 
     match animation {
         Animation::Movement(movement) => {
-            board.move_pieces(
+            level.move_pieces(
                 pieces,
                 movement.direction,
                 &mut q_piece.transmute_lens().query(),
             );
 
-            let focus_coords = board
+            let focus_coords = level
                 .present
                 .neighbor(focus.coords(true).unwrap(), movement.direction)
                 .unwrap();
 
-            let unsupported = board.present.unsupported_pieces();
+            let unsupported = level.present.unsupported_pieces();
             if unsupported.is_empty() {
                 ev_update_focus.send(UpdateFocusEvent(Focus::Selected(
                     focus_coords,
-                    board.present.compute_allowed_moves(focus_coords),
+                    level.present.compute_allowed_moves(focus_coords),
                 )));
             } else {
                 ev_update_focus.send(UpdateFocusEvent(Focus::Busy(Some(focus_coords))));
@@ -165,11 +165,11 @@ fn finish_animation(
                 _ => None,
             };
             for coords in pieces.iter() {
-                board.remove_piece(coords, &mut commands);
+                level.remove_piece(coords, &mut commands);
             }
             let new_focus = match focus_coords {
                 Some(coords) => {
-                    Focus::Selected(coords, board.present.compute_allowed_moves(coords))
+                    Focus::Selected(coords, level.present.compute_allowed_moves(coords))
                 }
                 None => Focus::None,
             };
