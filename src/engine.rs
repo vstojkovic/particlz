@@ -6,6 +6,7 @@ use bevy::asset::AssetServer;
 use bevy::ecs::component::Component;
 use bevy::ecs::system::Resource;
 use bevy::math::Vec2;
+use bevy::prelude::*;
 
 pub mod animation;
 pub mod beam;
@@ -28,6 +29,17 @@ use self::tile::TileAssets;
 const TILE_WIDTH: f32 = 45.0;
 const TILE_HEIGHT: f32 = 45.0;
 const MOVE_DURATION: Duration = Duration::from_millis(500);
+
+#[derive(States, Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum GameState {
+    #[default]
+    Init,
+    Playing,
+    GameOver,
+}
+
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct GameplaySet;
 
 #[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct BoardCoordsHolder(pub BoardCoords);

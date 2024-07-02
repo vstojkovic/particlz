@@ -19,9 +19,12 @@ use strum::IntoEnumIterator;
 
 use crate::model::{BoardCoords, Direction};
 
-use super::EngineCoords;
+use super::{EngineCoords, GameplaySet};
 
 pub struct FocusPlugin;
+
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FocusSet;
 
 #[derive(Component, Debug, Clone)]
 pub enum Focus {
@@ -177,7 +180,8 @@ fn direction_offset(direction: Direction) -> Vec2 {
 impl Plugin for FocusPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<UpdateFocusEvent>()
-            .add_systems(FixedPostUpdate, update_focus);
+            .configure_sets(FixedPostUpdate, FocusSet.in_set(GameplaySet))
+            .add_systems(FixedPostUpdate, update_focus.in_set(FocusSet));
     }
 }
 

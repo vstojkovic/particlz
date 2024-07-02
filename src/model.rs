@@ -9,6 +9,7 @@ use strum_macros::{EnumCount, EnumIter, FromRepr};
 mod board;
 mod element;
 mod grid;
+mod level;
 mod movement;
 mod pbc1;
 mod support;
@@ -18,6 +19,7 @@ pub use element::{
     BeamTarget, BeamTargetKind, Border, Emitters, Manipulator, Particle, Piece, Tile, TileKind,
 };
 pub use grid::{GridMap, GridSet};
+pub use level::{LevelOutcome, LevelProgress};
 
 pub const MAX_BOARD_ROWS: usize = 15;
 pub const MAX_BOARD_COLS: usize = 15;

@@ -16,6 +16,7 @@ use crate::model::{BoardCoords, Direction, Piece};
 use super::focus::{focus_direction_for_offset, get_focus, Focus};
 use super::level::Level;
 use super::manipulator::is_offset_inside_manipulator;
+use super::GameplaySet;
 
 pub struct InputPlugin;
 
@@ -137,6 +138,7 @@ impl Plugin for InputPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<SelectManipulatorEvent>()
             .add_event::<MoveManipulatorEvent>()
+            .configure_sets(FixedPreUpdate, InputSet.in_set(GameplaySet))
             .add_systems(
                 FixedPreUpdate,
                 (

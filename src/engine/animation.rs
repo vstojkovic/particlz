@@ -7,7 +7,7 @@ use interpolation::Ease;
 
 use crate::model::{BoardCoords, Direction, GridSet};
 
-use super::{BoardCoordsHolder, EngineCoords, EngineDirection, MOVE_DURATION};
+use super::{BoardCoordsHolder, EngineCoords, EngineDirection, GameplaySet, MOVE_DURATION};
 
 pub struct AnimationPlugin;
 
@@ -184,6 +184,7 @@ impl Plugin for AnimationPlugin {
         app.insert_resource(AnimationStateHolder::default())
             .add_event::<StartAnimation>()
             .add_event::<AnimationFinished>()
+            .configure_sets(FixedUpdate, AnimationSet.in_set(GameplaySet))
             .add_systems(FixedUpdate, start_animation.in_set(AnimationSet))
             .add_systems(
                 FixedUpdate,

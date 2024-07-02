@@ -8,7 +8,7 @@ use bevy::ecs::schedule::{IntoSystemConfigs, SystemSet};
 use bevy::ecs::system::{Query, Res};
 use bevy::hierarchy::{ChildBuilder, Children, Parent};
 use bevy::math::Vec2;
-use bevy::prelude::Without;
+use bevy::prelude::*;
 use bevy::render::color::Color;
 use bevy::render::view::Visibility;
 use bevy::sprite::{Anchor, Sprite, SpriteBundle};
@@ -23,7 +23,7 @@ use crate::model::{
 use super::animation::FadeOutAnimator;
 use super::border::{BORDER_OFFSET_X, BORDER_OFFSET_Y};
 use super::level::Level;
-use super::{BoardCoordsHolder, MOVE_DURATION, TILE_HEIGHT, TILE_WIDTH};
+use super::{BoardCoordsHolder, GameplaySet, MOVE_DURATION, TILE_HEIGHT, TILE_WIDTH};
 
 pub struct BeamPlugin;
 
@@ -351,6 +351,8 @@ impl Plugin for BeamPlugin {
     fn build(&self, app: &mut bevy::prelude::App) {
         app.add_event::<MoveBeams>()
             .add_event::<ResetBeams>()
+            .configure_sets(FixedUpdate, BeamSet.in_set(GameplaySet))
+            .configure_sets(FixedPostUpdate, BeamSet.in_set(GameplaySet))
             .add_systems(
                 FixedUpdate,
                 (move_beams, animate_beams).chain().in_set(BeamSet),

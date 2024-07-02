@@ -1,4 +1,4 @@
-use bevy::app::{App, Startup};
+use bevy::app::{App, AppExit, Startup};
 use bevy::asset::AssetServer;
 use bevy::core_pipeline::core_2d::Camera2dBundle;
 use bevy::ecs::schedule::IntoSystemConfigs;
@@ -6,6 +6,8 @@ use bevy::ecs::system::{Commands, Res, ResMut};
 use bevy::prelude::*;
 use bevy::window::{Window, WindowPlugin};
 use bevy::DefaultPlugins;
+use engine::GameplaySet;
+use model::LevelOutcome;
 
 mod engine;
 mod model;
@@ -17,7 +19,7 @@ use self::engine::beam::{BeamPlugin, BeamSet, MoveBeams, ResetBeams};
 use self::engine::focus::{get_focus, Focus, FocusPlugin, UpdateFocusEvent};
 use self::engine::input::{InputPlugin, MoveManipulatorEvent, SelectManipulatorEvent};
 use self::engine::level::Level;
-use self::engine::{Assets, BoardCoordsHolder};
+use self::engine::{Assets, BoardCoordsHolder, GameState};
 use self::model::{Board, Border, Emitters, Manipulator, Particle, Piece, Tile, TileKind, Tint};
 
 fn main() {
@@ -27,6 +29,7 @@ fn main() {
         make_test_board()
     };
     App::new()
+        .init_state::<GameState>()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "Particlz".into(),
@@ -34,6 +37,18 @@ fn main() {
             }),
             ..Default::default()
         }))
+        .configure_sets(
+            FixedPreUpdate,
+            GameplaySet.run_if(in_state(GameState::Playing)),
+        )
+        .configure_sets(
+            FixedUpdate,
+            GameplaySet.run_if(in_state(GameState::Playing)),
+        )
+        .configure_sets(
+            FixedPostUpdate,
+            GameplaySet.run_if(in_state(GameState::Playing)),
+        )
         .add_plugins(InputPlugin)
         .add_plugins(AnimationPlugin)
         .add_plugins(FocusPlugin)
@@ -43,14 +58,20 @@ fn main() {
         .add_systems(
             FixedUpdate,
             (
-                get_focus.pipe(select_manipulator),
+                get_focus.pipe(select_manipulator).in_set(GameplaySet),
                 get_focus
                     .pipe(move_manipulator)
                     .before(AnimationSet)
-                    .before(BeamSet),
-                get_focus.pipe(finish_animation).after(AnimationSet),
+                    .before(BeamSet)
+                    .in_set(GameplaySet),
+                get_focus
+                    .pipe(finish_animation)
+                    .after(AnimationSet)
+                    .in_set(GameplaySet),
             ),
         )
+        .add_systems(FixedPostUpdate, check_game_over.in_set(GameplaySet))
+        .add_systems(OnEnter(GameState::GameOver), game_over)
         .run();
 }
 
@@ -58,9 +79,15 @@ fn load_assets(mut commands: Commands, server: Res<AssetServer>) {
     commands.insert_resource(Assets::load(&server));
 }
 
-fn setup_board(mut commands: Commands, mut level: ResMut<Level>, assets: Res<Assets>) {
+fn setup_board(
+    mut commands: Commands,
+    mut level: ResMut<Level>,
+    assets: Res<Assets>,
+    mut next_state: ResMut<NextState<GameState>>,
+) {
     commands.spawn(Camera2dBundle::default());
     level.spawn(&mut commands, &assets);
+    next_state.set(GameState::Playing);
 }
 
 fn select_manipulator(
@@ -164,9 +191,7 @@ fn finish_animation(
                 Some(coords) if !pieces.contains(coords) => Some(coords),
                 _ => None,
             };
-            for coords in pieces.iter() {
-                level.remove_piece(coords, &mut commands);
-            }
+            level.remove_pieces(pieces, &mut commands);
             let new_focus = match focus_coords {
                 Some(coords) => {
                     Focus::Selected(coords, level.present.compute_allowed_moves(coords))
@@ -177,6 +202,22 @@ fn finish_animation(
         }
     }
     ev_retarget.send(ResetBeams);
+}
+
+fn check_game_over(level: Res<Level>, mut next_state: ResMut<NextState<GameState>>) {
+    if level.progress.outcome.is_some() {
+        next_state.set(GameState::GameOver);
+    }
+}
+
+fn game_over(level: Res<Level>, mut exit: EventWriter<AppExit>) {
+    let outcome_text = match level.progress.outcome.unwrap() {
+        LevelOutcome::NoManipulatorsLeft => "you have no manipulators left",
+        LevelOutcome::ParticleLost => "you lost a particle",
+        LevelOutcome::Victory => "you beat the level",
+    };
+    bevy::log::info!("Game over: {}", outcome_text);
+    exit.send(AppExit);
 }
 
 fn make_test_board() -> Board {

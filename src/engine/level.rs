@@ -3,10 +3,12 @@ use bevy::ecs::entity::Entity;
 use bevy::ecs::system::{Commands, Query, Resource};
 use bevy::hierarchy::{BuildChildren, DespawnRecursiveExt};
 use bevy::math::Vec2;
-use bevy::prelude::SpatialBundle;
+use bevy::prelude::*;
 use bevy::transform::components::Transform;
 
-use crate::model::{Board, BoardCoords, Direction, GridMap, GridSet, Piece};
+use crate::model::{
+    Board, BoardCoords, Direction, GridMap, GridSet, LevelProgress, Piece, Tile, TileKind,
+};
 
 use super::border::{spawn_horz_border, spawn_vert_border};
 use super::focus::spawn_focus;
@@ -24,6 +26,7 @@ pub struct Level {
     pub horz_borders: GridMap<Entity>,
     pub vert_borders: GridMap<Entity>,
     pub pieces: GridMap<Entity>,
+    pub progress: LevelProgress,
 }
 
 #[derive(Bundle, Default)]
@@ -39,6 +42,7 @@ impl Level {
         let horz_borders = GridMap::like(&present.horz_borders);
         let vert_borders = GridMap::like(&present.vert_borders);
         let pieces = GridMap::like(&present.pieces);
+        let progress = LevelProgress::new(&present);
         Self {
             present,
             future,
@@ -47,6 +51,7 @@ impl Level {
             horz_borders,
             vert_borders,
             pieces,
+            progress,
         }
     }
 
@@ -130,20 +135,39 @@ impl Level {
 
     pub fn move_pieces(
         &mut self,
-        move_set: &GridSet,
+        pieces: &GridSet,
         direction: Direction,
         q_piece: &mut Query<(&mut BoardCoordsHolder, &mut Transform)>,
     ) {
-        move_set.for_each(direction, |from_coords| {
+        pieces.for_each(direction, |from_coords| {
             let to_coords = self.present.neighbor(from_coords, direction).unwrap();
             self.move_piece(from_coords, to_coords, q_piece);
+            if let Some(Piece::Particle(_)) = self.present.pieces.get(to_coords) {
+                if let Some(Tile {
+                    kind: TileKind::Collector,
+                    ..
+                }) = self.present.tiles.get(to_coords)
+                {
+                    self.progress.particle_collected();
+                }
+            }
         });
     }
 
     pub fn remove_piece(&mut self, coords: BoardCoords, commands: &mut Commands) {
+        let outcome = self
+            .progress
+            .piece_lost(self.present.pieces.get(coords).unwrap());
         self.present.remove_piece(coords);
         self.future.remove_piece(coords);
         let entity = self.pieces.take(coords).unwrap();
         commands.entity(entity).despawn_recursive();
+        outcome
+    }
+
+    pub fn remove_pieces(&mut self, pieces: &GridSet, commands: &mut Commands) {
+        for coords in pieces.iter() {
+            self.remove_piece(coords, commands);
+        }
     }
 }
