@@ -169,7 +169,7 @@ fn animate_fade_out(
             continue;
         }
         let alpha = 1.0.lerp(0.0, state.progress().sine_in_out());
-        sprite.color = sprite.color.with_a(alpha);
+        sprite.color = sprite.color.with_alpha(alpha);
         animator.is_fading = !state.is_finished();
     }
 

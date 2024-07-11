@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use bevy::app::{FixedPostUpdate, FixedUpdate, Plugin};
+use bevy::color::Color;
 use bevy::ecs::bundle::Bundle;
 use bevy::ecs::component::Component;
 use bevy::ecs::event::{Event, EventReader};
@@ -9,7 +10,6 @@ use bevy::ecs::system::{Query, Res};
 use bevy::hierarchy::{ChildBuilder, Children, Parent};
 use bevy::math::Vec2;
 use bevy::prelude::*;
-use bevy::render::color::Color;
 use bevy::render::view::Visibility;
 use bevy::sprite::{Anchor, Sprite, SpriteBundle};
 use bevy::time::Time;
@@ -344,7 +344,7 @@ fn beam_scale(origin: BoardCoords, direction: Direction, target: BeamTarget) -> 
 }
 
 fn beam_color(alpha: f32) -> Color {
-    Color::rgb_u8(0, 153, 255).with_a(alpha)
+    Color::srgb_u8(0, 153, 255).with_alpha(alpha)
 }
 
 impl Plugin for BeamPlugin {

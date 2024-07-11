@@ -29,7 +29,6 @@ fn main() {
         make_test_board()
     };
     App::new()
-        .init_state::<GameState>()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "Particlz".into(),
@@ -37,6 +36,11 @@ fn main() {
             }),
             ..Default::default()
         }))
+        .add_plugins(InputPlugin)
+        .add_plugins(AnimationPlugin)
+        .add_plugins(FocusPlugin)
+        .add_plugins(BeamPlugin)
+        .init_state::<GameState>()
         .configure_sets(
             FixedPreUpdate,
             GameplaySet.run_if(in_state(GameState::Playing)),
@@ -49,10 +53,6 @@ fn main() {
             FixedPostUpdate,
             GameplaySet.run_if(in_state(GameState::Playing)),
         )
-        .add_plugins(InputPlugin)
-        .add_plugins(AnimationPlugin)
-        .add_plugins(FocusPlugin)
-        .add_plugins(BeamPlugin)
         .insert_resource(Level::new(board))
         .add_systems(Startup, (load_assets, setup_board).chain())
         .add_systems(
@@ -217,7 +217,7 @@ fn game_over(level: Res<Level>, mut exit: EventWriter<AppExit>) {
         LevelOutcome::Victory => "you beat the level",
     };
     bevy::log::info!("Game over: {}", outcome_text);
-    exit.send(AppExit);
+    exit.send(AppExit::Success);
 }
 
 fn make_test_board() -> Board {
