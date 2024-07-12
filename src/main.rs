@@ -13,7 +13,7 @@ mod engine;
 mod model;
 
 use self::engine::animation::{
-    Animation, AnimationFinished, AnimationPlugin, AnimationSet, Movement, StartAnimation,
+    Animation, AnimationFinished, AnimationPlugin, AnimationSet, StartAnimation,
 };
 use self::engine::beam::{BeamPlugin, BeamSet, MoveBeams, ResetBeams};
 use self::engine::focus::{get_focus, Focus, FocusPlugin, UpdateFocusEvent};
@@ -134,9 +134,8 @@ fn move_manipulator(
     level.future.move_pieces(&move_set, direction);
     level.future.retarget_beams();
 
-    let movement = Movement { leader, direction };
     ev_start_animation.send(StartAnimation(
-        Animation::Movement(movement),
+        Animation::Movement(direction),
         move_set.clone(),
     ));
     ev_move_beams.send(MoveBeams {
@@ -163,16 +162,12 @@ fn finish_animation(
     level.update_present();
 
     match animation {
-        Animation::Movement(movement) => {
-            level.move_pieces(
-                pieces,
-                movement.direction,
-                &mut q_piece.transmute_lens().query(),
-            );
+        Animation::Movement(direction) => {
+            level.move_pieces(pieces, *direction, &mut q_piece.transmute_lens().query());
 
             let focus_coords = level
                 .present
-                .neighbor(focus.coords(true).unwrap(), movement.direction)
+                .neighbor(focus.coords(true).unwrap(), *direction)
                 .unwrap();
 
             let unsupported = level.present.unsupported_pieces();

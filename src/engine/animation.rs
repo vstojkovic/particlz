@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use bevy::transform::components::Transform;
 use interpolation::Ease;
 
-use crate::model::{BoardCoords, Direction, GridSet};
+use crate::model::{Direction, GridSet};
 
 use super::{BoardCoordsHolder, EngineCoords, EngineDirection, GameplaySet, MOVE_DURATION};
 
@@ -13,18 +13,12 @@ pub struct AnimationPlugin;
 
 #[derive(Debug, Clone)]
 pub enum Animation {
-    Movement(Movement),
+    Movement(Direction),
     FadeOut,
 }
 
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AnimationSet;
-
-#[derive(Debug, Clone)]
-pub struct Movement {
-    pub leader: BoardCoords,
-    pub direction: Direction,
-}
 
 #[derive(Resource, Debug, Default)]
 struct AnimationStateHolder(Option<AnimationState>);
@@ -95,13 +89,13 @@ fn start_animation(
         total_duration,
     });
     match animation {
-        Animation::Movement(movement) => {
+        Animation::Movement(direction) => {
             for (coords, mut animator) in q_mover.iter_mut() {
                 if !pieces.contains(coords.0) {
                     continue;
                 }
                 animator.start = coords.to_xy();
-                animator.end = animator.start + movement.direction.delta();
+                animator.end = animator.start + direction.delta();
                 animator.is_moving = true;
             }
         }
