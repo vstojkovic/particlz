@@ -1,5 +1,6 @@
 //! Engine-specific game data and logic
 
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use bevy::asset::AssetServer;
@@ -46,6 +47,7 @@ pub struct BoardCoordsHolder(pub BoardCoords);
 
 #[derive(Resource)]
 pub struct Assets {
+    load_barrier: Weak<()>,
     tiles: TileAssets,
     borders: BorderAssets,
     particles: ParticleAssets,
@@ -55,13 +57,19 @@ pub struct Assets {
 
 impl Assets {
     pub fn load(server: &AssetServer) -> Self {
+        let load_barrier = Arc::new(());
         Self {
-            tiles: TileAssets::load(server),
-            borders: BorderAssets::load(server),
-            particles: ParticleAssets::load(server),
-            manipulators: ManipulatorAssets::load(server),
-            focus: FocusAssets::load(server),
+            load_barrier: Arc::downgrade(&load_barrier),
+            tiles: TileAssets::load(server, &load_barrier),
+            borders: BorderAssets::load(server, &load_barrier),
+            particles: ParticleAssets::load(server, &load_barrier),
+            manipulators: ManipulatorAssets::load(server, &load_barrier),
+            focus: FocusAssets::load(server, &load_barrier),
         }
+    }
+
+    pub fn is_loaded(&self) -> bool {
+        self.load_barrier.strong_count() == 0
     }
 }
 

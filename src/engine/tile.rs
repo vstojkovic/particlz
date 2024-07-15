@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use bevy::asset::{AssetServer, Handle};
 use bevy::ecs::bundle::Bundle;
@@ -24,7 +25,7 @@ struct TileBundle {
 }
 
 impl TileAssets {
-    pub fn load(server: &AssetServer) -> Self {
+    pub fn load(server: &AssetServer, barrier: &Arc<()>) -> Self {
         let mut textures = HashMap::new();
         for kind in TileKind::iter() {
             let kind_part = match kind {
@@ -40,7 +41,10 @@ impl TileAssets {
                 };
                 textures.insert(
                     (kind, tint),
-                    server.load(format!("{}-{}.png", kind_part, tint_part)),
+                    server.load_acquire(
+                        format!("{}-{}.png", kind_part, tint_part),
+                        Arc::clone(&barrier),
+                    ),
                 );
             }
         }

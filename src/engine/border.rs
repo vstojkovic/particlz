@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use bevy::asset::{AssetServer, Handle};
 use bevy::ecs::bundle::Bundle;
@@ -41,14 +42,14 @@ impl Orientation {
 }
 
 impl BorderAssets {
-    pub fn load(server: &AssetServer) -> Self {
+    pub fn load(server: &AssetServer, barrier: &Arc<()>) -> Self {
         let mut textures = HashMap::new();
         for kind in Border::iter() {
             let path = match kind {
                 Border::Wall => "wall.png",
                 Border::Window => "window.png",
             };
-            textures.insert(kind, server.load(path));
+            textures.insert(kind, server.load_acquire(path, Arc::clone(&barrier)));
         }
         Self { textures }
     }

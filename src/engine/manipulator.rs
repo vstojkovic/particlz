@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use bevy::asset::{AssetServer, Handle};
 use bevy::ecs::bundle::Bundle;
@@ -28,7 +29,7 @@ struct ManipulatorBundle {
 }
 
 impl ManipulatorAssets {
-    pub fn load(server: &AssetServer) -> Self {
+    pub fn load(server: &AssetServer, barrier: &Arc<()>) -> Self {
         let mut textures = HashMap::new();
         for emitters in Emitters::iter() {
             let path = match emitters {
@@ -43,7 +44,7 @@ impl ManipulatorAssets {
                 Emitters::LeftRight => "manipulator-lr.png",
                 Emitters::UpDown => "manipulator-ud.png",
             };
-            textures.insert(emitters, server.load(path));
+            textures.insert(emitters, server.load_acquire(path, Arc::clone(&barrier)));
         }
         Self { textures }
     }

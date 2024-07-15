@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use bevy::app::Plugin;
 use bevy::asset::{AssetServer, Handle};
@@ -67,7 +68,7 @@ impl Focus {
 }
 
 impl FocusAssets {
-    pub fn load(server: &AssetServer) -> Self {
+    pub fn load(server: &AssetServer, barrier: &Arc<()>) -> Self {
         let texture = server.load("focus.png");
         let mut arrow_textures = HashMap::new();
         for direction in Direction::iter() {
@@ -77,7 +78,7 @@ impl FocusAssets {
                 Direction::Down => "focus-d.png",
                 Direction::Right => "focus-r.png",
             };
-            arrow_textures.insert(direction, server.load(path));
+            arrow_textures.insert(direction, server.load_acquire(path, Arc::clone(&barrier)));
         }
         Self {
             texture,

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use bevy::asset::{AssetServer, Handle};
 use bevy::ecs::bundle::Bundle;
@@ -26,7 +27,7 @@ struct ParticleBundle {
 }
 
 impl ParticleAssets {
-    pub fn load(server: &AssetServer) -> Self {
+    pub fn load(server: &AssetServer, barrier: &Arc<()>) -> Self {
         let mut textures = HashMap::new();
         for tint in Tint::iter() {
             let path = match tint {
@@ -35,7 +36,7 @@ impl ParticleAssets {
                 Tint::Yellow => "particle-yellow.png",
                 Tint::Red => "particle-red.png",
             };
-            textures.insert(tint, server.load(path));
+            textures.insert(tint, server.load_acquire(path, Arc::clone(&barrier)));
         }
         Self { textures }
     }

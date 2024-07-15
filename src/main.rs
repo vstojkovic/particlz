@@ -55,6 +55,7 @@ fn main() {
         )
         .insert_resource(Level::new(board))
         .add_systems(Startup, (load_assets, setup_board).chain())
+        .add_systems(Update, monitor_load.run_if(in_state(GameState::Init)))
         .add_systems(
             FixedUpdate,
             (
@@ -79,15 +80,15 @@ fn load_assets(mut commands: Commands, server: Res<AssetServer>) {
     commands.insert_resource(Assets::load(&server));
 }
 
-fn setup_board(
-    mut commands: Commands,
-    mut level: ResMut<Level>,
-    assets: Res<Assets>,
-    mut next_state: ResMut<NextState<GameState>>,
-) {
+fn monitor_load(assets: Res<Assets>, mut next_state: ResMut<NextState<GameState>>) {
+    if assets.is_loaded() {
+        next_state.set(GameState::Playing);
+    }
+}
+
+fn setup_board(mut commands: Commands, mut level: ResMut<Level>, assets: Res<Assets>) {
     commands.spawn(Camera2dBundle::default());
     level.spawn(&mut commands, &assets);
-    next_state.set(GameState::Playing);
 }
 
 fn select_manipulator(
