@@ -15,7 +15,7 @@ use super::focus::spawn_focus;
 use super::manipulator::spawn_manipulator;
 use super::particle::spawn_particle;
 use super::tile::spawn_tile;
-use super::{Assets, BoardCoordsHolder, EngineCoords};
+use super::{BoardCoordsHolder, EngineCoords, GameAssets};
 
 #[derive(Resource)]
 pub struct Level {
@@ -55,7 +55,7 @@ impl Level {
         }
     }
 
-    pub fn spawn(&mut self, commands: &mut Commands, assets: &Assets) {
+    pub fn spawn(&mut self, commands: &mut Commands, assets: &GameAssets) {
         let mut parent = commands.spawn(BoardBundle::default());
         self.parent = parent.id();
         parent.with_children(|parent| {

@@ -1,13 +1,13 @@
-use bevy::app::{App, AppExit, Startup};
-use bevy::asset::AssetServer;
+use bevy::app::{App, AppExit};
 use bevy::core_pipeline::core_2d::Camera2dBundle;
 use bevy::ecs::schedule::IntoSystemConfigs;
 use bevy::ecs::system::{Commands, Res, ResMut};
 use bevy::prelude::*;
 use bevy::window::{Window, WindowPlugin};
 use bevy::DefaultPlugins;
-use engine::GameplaySet;
-use model::LevelOutcome;
+use bevy_egui::EguiPlugin;
+use engine::gui::GuiPlugin;
+use engine::AssetsPlugin;
 
 mod engine;
 mod model;
@@ -19,8 +19,10 @@ use self::engine::beam::{BeamPlugin, BeamSet, MoveBeams, ResetBeams};
 use self::engine::focus::{get_focus, Focus, FocusPlugin, UpdateFocusEvent};
 use self::engine::input::{InputPlugin, MoveManipulatorEvent, SelectManipulatorEvent};
 use self::engine::level::Level;
-use self::engine::{Assets, BoardCoordsHolder, GameState};
-use self::model::{Board, Border, Emitters, Manipulator, Particle, Piece, Tile, TileKind, Tint};
+use self::engine::{AssetsLoaded, BoardCoordsHolder, GameAssets, GameState, GameplaySet};
+use self::model::{
+    Board, Border, Emitters, LevelOutcome, Manipulator, Particle, Piece, Tile, TileKind, Tint,
+};
 
 fn main() {
     let board = if let Some(code) = std::env::args().nth(1) {
@@ -36,11 +38,14 @@ fn main() {
             }),
             ..Default::default()
         }))
+        .init_state::<GameState>()
+        .add_plugins(EguiPlugin)
+        .add_plugins(GuiPlugin)
+        .add_plugins(AssetsPlugin)
         .add_plugins(InputPlugin)
         .add_plugins(AnimationPlugin)
         .add_plugins(FocusPlugin)
         .add_plugins(BeamPlugin)
-        .init_state::<GameState>()
         .configure_sets(
             FixedPreUpdate,
             GameplaySet.run_if(in_state(GameState::Playing)),
@@ -54,8 +59,8 @@ fn main() {
             GameplaySet.run_if(in_state(GameState::Playing)),
         )
         .insert_resource(Level::new(board))
-        .add_systems(Startup, (load_assets, setup_board).chain())
-        .add_systems(Update, monitor_load.run_if(in_state(GameState::Init)))
+        .add_systems(Update, finish_init.run_if(in_state(GameState::Init)))
+        .add_systems(OnEnter(GameState::Playing), setup_board)
         .add_systems(
             FixedUpdate,
             (
@@ -76,17 +81,16 @@ fn main() {
         .run();
 }
 
-fn load_assets(mut commands: Commands, server: Res<AssetServer>) {
-    commands.insert_resource(Assets::load(&server));
-}
-
-fn monitor_load(assets: Res<Assets>, mut next_state: ResMut<NextState<GameState>>) {
-    if assets.is_loaded() {
-        next_state.set(GameState::Playing);
+fn finish_init(
+    mut ev_loaded: EventReader<AssetsLoaded>,
+    mut next_state: ResMut<NextState<GameState>>,
+) {
+    if ev_loaded.read().last().is_some() {
+        next_state.set(GameState::MainMenu);
     }
 }
 
-fn setup_board(mut commands: Commands, mut level: ResMut<Level>, assets: Res<Assets>) {
+fn setup_board(mut commands: Commands, mut level: ResMut<Level>, assets: Res<GameAssets>) {
     commands.spawn(Camera2dBundle::default());
     level.spawn(&mut commands, &assets);
 }

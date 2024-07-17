@@ -13,6 +13,7 @@ pub mod animation;
 pub mod beam;
 pub mod border;
 pub mod focus;
+pub mod gui;
 pub mod input;
 pub mod level;
 pub mod manipulator;
@@ -23,6 +24,7 @@ use crate::model::{BoardCoords, Direction};
 
 use self::border::BorderAssets;
 use self::focus::FocusAssets;
+use self::gui::GuiAssets;
 use self::manipulator::ManipulatorAssets;
 use self::particle::ParticleAssets;
 use self::tile::TileAssets;
@@ -35,6 +37,7 @@ const MOVE_DURATION: Duration = Duration::from_millis(500);
 pub enum GameState {
     #[default]
     Init,
+    MainMenu,
     Playing,
     GameOver,
 }
@@ -45,9 +48,12 @@ pub struct GameplaySet;
 #[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct BoardCoordsHolder(pub BoardCoords);
 
+pub struct AssetsPlugin;
+
 #[derive(Resource)]
-pub struct Assets {
+pub struct GameAssets {
     load_barrier: Weak<()>,
+    gui: GuiAssets,
     tiles: TileAssets,
     borders: BorderAssets,
     particles: ParticleAssets,
@@ -55,11 +61,15 @@ pub struct Assets {
     focus: FocusAssets,
 }
 
-impl Assets {
+#[derive(Event, Debug)]
+pub struct AssetsLoaded;
+
+impl GameAssets {
     pub fn load(server: &AssetServer) -> Self {
         let load_barrier = Arc::new(());
         Self {
             load_barrier: Arc::downgrade(&load_barrier),
+            gui: GuiAssets::load(server, &load_barrier),
             tiles: TileAssets::load(server, &load_barrier),
             borders: BorderAssets::load(server, &load_barrier),
             particles: ParticleAssets::load(server, &load_barrier),
@@ -68,8 +78,18 @@ impl Assets {
         }
     }
 
-    pub fn is_loaded(&self) -> bool {
+    fn ready(&self) -> bool {
         self.load_barrier.strong_count() == 0
+    }
+}
+
+fn load_assets(mut commands: Commands, server: Res<AssetServer>) {
+    commands.insert_resource(GameAssets::load(&server));
+}
+
+fn monitor_load(assets: Res<GameAssets>, mut ev_loaded: EventWriter<AssetsLoaded>) {
+    if assets.ready() {
+        ev_loaded.send(AssetsLoaded);
     }
 }
 
@@ -119,5 +139,13 @@ impl EngineDirection for Direction {
             Self::Down => Vec2::new(0.0, -TILE_HEIGHT),
             Self::Right => Vec2::new(TILE_WIDTH, 0.0),
         }
+    }
+}
+
+impl Plugin for AssetsPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_event::<AssetsLoaded>()
+            .add_systems(Startup, load_assets)
+            .add_systems(PreUpdate, monitor_load.run_if(in_state(GameState::Init)));
     }
 }
