@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use bevy::app::{FixedPostUpdate, FixedUpdate, Plugin};
@@ -7,25 +8,32 @@ use bevy::ecs::component::Component;
 use bevy::ecs::event::{Event, EventReader};
 use bevy::ecs::schedule::{IntoSystemConfigs, SystemSet};
 use bevy::ecs::system::{Query, Res};
-use bevy::hierarchy::{ChildBuilder, Children, Parent};
+use bevy::hierarchy::{ChildBuilder, Children};
 use bevy::math::Vec2;
 use bevy::prelude::*;
 use bevy::render::view::Visibility;
 use bevy::sprite::{Anchor, Sprite, SpriteBundle};
 use bevy::time::Time;
 use bevy::transform::components::Transform;
+use enum_map::EnumMap;
 use interpolation::{Ease, Lerp};
+use strum::IntoEnumIterator;
 
 use crate::model::{
-    BeamTarget, BeamTargetKind, Board, BoardCoords, Direction, Emitters, GridSet, Piece,
+    BeamTarget, BeamTargetKind, Board, BoardCoords, Direction, Emitters, GridSet, Orientation,
+    Piece, Tile, TileKind,
 };
 
-use super::animation::FadeOutAnimator;
+use super::animation::{AnimatedSpriteBundle, FadeOutAnimator};
 use super::border::{BORDER_OFFSET_X, BORDER_OFFSET_Y};
 use super::level::Level;
-use super::{BoardCoordsHolder, GameplaySet, MOVE_DURATION, TILE_HEIGHT, TILE_WIDTH};
+use super::{BoardCoordsHolder, GameplaySet, SpriteSheet, MOVE_DURATION, TILE_HEIGHT, TILE_WIDTH};
 
 pub struct BeamPlugin;
+
+pub struct BeamAssets {
+    sheets: EnumMap<Orientation, SpriteSheet>,
+}
 
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BeamSet;
@@ -66,7 +74,7 @@ impl Default for BeamAnimation {
 pub struct BeamBundle {
     beam: Beam,
     coords: BoardCoordsHolder,
-    sprite: SpriteBundle,
+    sprite: AnimatedSpriteBundle,
     animator: BeamAnimator,
     fader: FadeOutAnimator,
 }
@@ -80,12 +88,39 @@ pub struct MoveBeams {
 #[derive(Event)]
 pub struct ResetBeams;
 
+#[derive(Component)]
+pub struct Halo;
+
+#[derive(Bundle)]
+pub struct HaloBundle {
+    halo: Halo,
+    coords: BoardCoordsHolder,
+    sprite: AnimatedSpriteBundle,
+    fader: FadeOutAnimator,
+}
+
+impl BeamAssets {
+    pub fn load(server: &AssetServer, barrier: &Arc<()>) -> Self {
+        let mut sheets = EnumMap::default();
+        for orientation in Orientation::iter() {
+            let (path, size) = match orientation {
+                Orientation::Horizontal => ("beam-horz.png", UVec2::new(1, 8)),
+                Orientation::Vertical => ("beam-vert.png", UVec2::new(8, 1)),
+            };
+            let texture = server.load_acquire(path, Arc::clone(&barrier));
+            sheets[orientation] = SpriteSheet::new(texture, size, 48, server);
+        }
+        Self { sheets }
+    }
+}
+
 impl BeamBundle {
     fn new(
         origin: BoardCoords,
         direction: Direction,
         target: BeamTarget,
         group: BeamGroup,
+        assets: &BeamAssets,
     ) -> Self {
         let sprite_anchor = match direction {
             Direction::Up => Anchor::BottomCenter,
@@ -94,23 +129,28 @@ impl BeamBundle {
             Direction::Right => Anchor::CenterLeft,
         };
 
+        let sprite = SpriteBundle {
+            sprite: Sprite {
+                color: beam_color(group.alpha()),
+                anchor: sprite_anchor,
+                ..Default::default()
+            },
+            transform: Transform {
+                translation: Vec2::ZERO.extend(REL_Z_LAYER),
+                scale: beam_scale(origin, direction, target).extend(1.0),
+                ..Default::default()
+            },
+            visibility: group.visibility(),
+            ..Default::default()
+        };
+
         Self {
             beam: Beam { direction, group },
             coords: BoardCoordsHolder(origin),
-            sprite: SpriteBundle {
-                sprite: Sprite {
-                    color: beam_color(group.alpha()),
-                    anchor: sprite_anchor,
-                    ..Default::default()
-                },
-                transform: Transform {
-                    translation: Vec2::ZERO.extend(REL_Z_LAYER),
-                    scale: beam_scale(origin, direction, target).extend(1.0),
-                    ..Default::default()
-                },
-                visibility: group.visibility(),
-                ..Default::default()
-            },
+            sprite: AnimatedSpriteBundle::with_defaults(
+                &assets.sheets[direction.orientation()],
+                sprite,
+            ),
             animator: BeamAnimator::default(),
             fader: FadeOutAnimator::default(),
         }
@@ -141,14 +181,34 @@ impl BeamAnimator {
     }
 }
 
+impl HaloBundle {
+    pub fn new(coords: BoardCoords, sheet: &SpriteSheet, z_layer: f32) -> Self {
+        let sprite = SpriteBundle {
+            transform: Transform {
+                translation: Vec2::ZERO.extend(z_layer),
+                ..Default::default()
+            },
+            visibility: Visibility::Hidden,
+            ..Default::default()
+        };
+        Self {
+            halo: Halo,
+            coords: BoardCoordsHolder(coords),
+            sprite: AnimatedSpriteBundle::with_defaults(sheet, sprite),
+            fader: FadeOutAnimator::default(),
+        }
+    }
+}
+
 pub fn spawn_beams(
     anchor: &mut ChildBuilder,
     origin: BoardCoords,
     emitters: Emitters,
     board: &Board,
+    assets: &BeamAssets,
 ) {
-    spawn_beam_group(anchor, origin, emitters, board, BeamGroup::Future);
-    spawn_beam_group(anchor, origin, emitters, board, BeamGroup::Present);
+    spawn_beam_group(anchor, origin, emitters, board, BeamGroup::Future, assets);
+    spawn_beam_group(anchor, origin, emitters, board, BeamGroup::Present, assets);
 }
 
 fn spawn_beam_group(
@@ -157,11 +217,12 @@ fn spawn_beam_group(
     emitters: Emitters,
     board: &Board,
     group: BeamGroup,
+    assets: &BeamAssets,
 ) {
     let manipulator = board.pieces.get(origin).unwrap().as_manipulator().unwrap();
     for direction in emitters.directions() {
         let target = manipulator.target(direction).unwrap();
-        anchor.spawn(BeamBundle::new(origin, direction, target, group));
+        anchor.spawn(BeamBundle::new(origin, direction, target, group, assets));
     }
 }
 
@@ -289,24 +350,27 @@ fn animate_beams(
 fn reset_beams(
     mut events: EventReader<ResetBeams>,
     level: Res<Level>,
-    mut q_beam: Query<(
-        &Beam,
-        &mut BoardCoordsHolder,
-        &mut Sprite,
-        &mut Transform,
-        &mut Visibility,
-        &Parent,
-    )>,
-    q_origin: Query<&BoardCoordsHolder, Without<Beam>>,
+    mut q_beam: Query<
+        (
+            &Beam,
+            &BoardCoordsHolder,
+            &mut Sprite,
+            &mut Transform,
+            &mut Visibility,
+        ),
+        Without<Halo>,
+    >,
+    mut q_halo: Query<(&BoardCoordsHolder, &mut Visibility), With<Halo>>,
 ) {
     if events.is_empty() {
         return;
     }
     events.clear();
-    for (beam, mut coords, mut sprite, mut xform, mut visibility, parent) in q_beam.iter_mut() {
-        let origin = q_origin.get(parent.get()).unwrap().0;
-        coords.0 = origin;
 
+    let mut halos = GridSet::like(&level.pieces);
+
+    for (beam, coords, mut sprite, mut xform, mut visibility) in q_beam.iter_mut() {
+        let origin = coords.0;
         let target = level
             .present
             .pieces
@@ -316,18 +380,42 @@ fn reset_beams(
             .unwrap()
             .target(beam.direction)
             .unwrap();
+
+        if target.kind == BeamTargetKind::Piece {
+            let mut has_halo = true;
+            if let Some(Piece::Particle(_)) = level.present.pieces.get(target.coords) {
+                if let Some(Tile {
+                    kind: TileKind::Collector,
+                    ..
+                }) = level.present.tiles.get(target.coords)
+                {
+                    has_halo = false;
+                }
+            }
+            if has_halo {
+                halos.insert(target.coords);
+            }
+        }
+
         xform.scale = beam_scale(origin, beam.direction, target).extend(1.0);
         *visibility = beam.group.visibility();
         sprite.color = beam_color(beam.group.alpha());
+    }
+
+    for (coords, mut visibility) in q_halo.iter_mut() {
+        *visibility = match halos.contains(coords.0) {
+            false => Visibility::Hidden,
+            true => Visibility::Inherited,
+        }
     }
 }
 
 fn beam_scale(origin: BoardCoords, direction: Direction, target: BeamTarget) -> Vec2 {
     let width = target.coords.col.abs_diff(origin.col) as f32;
     let height = target.coords.row.abs_diff(origin.row) as f32;
-    let scale = match direction {
-        Direction::Up | Direction::Down => Vec2::new(4.0, height * TILE_HEIGHT),
-        Direction::Left | Direction::Right => Vec2::new(width * TILE_WIDTH, 4.0),
+    let scale = match direction.orientation() {
+        Orientation::Vertical => Vec2::new(1.0, height * TILE_HEIGHT),
+        Orientation::Horizontal => Vec2::new(width * TILE_WIDTH, 1.0),
     };
     match target.kind {
         BeamTargetKind::Piece => scale,
@@ -344,7 +432,7 @@ fn beam_scale(origin: BoardCoords, direction: Direction, target: BeamTarget) -> 
 }
 
 fn beam_color(alpha: f32) -> Color {
-    Color::srgb_u8(0, 153, 255).with_alpha(alpha)
+    Color::WHITE.with_alpha(alpha)
 }
 
 impl Plugin for BeamPlugin {

@@ -3,6 +3,7 @@
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
+use beam::BeamAssets;
 use bevy::asset::AssetServer;
 use bevy::ecs::component::Component;
 use bevy::ecs::system::Resource;
@@ -58,6 +59,7 @@ pub struct GameAssets {
     borders: BorderAssets,
     particles: ParticleAssets,
     manipulators: ManipulatorAssets,
+    beams: BeamAssets,
     focus: FocusAssets,
 }
 
@@ -74,6 +76,7 @@ impl GameAssets {
             borders: BorderAssets::load(server, &load_barrier),
             particles: ParticleAssets::load(server, &load_barrier),
             manipulators: ManipulatorAssets::load(server, &load_barrier),
+            beams: BeamAssets::load(server, &load_barrier),
             focus: FocusAssets::load(server, &load_barrier),
         }
     }
@@ -90,6 +93,25 @@ fn load_assets(mut commands: Commands, server: Res<AssetServer>) {
 fn monitor_load(assets: Res<GameAssets>, mut ev_loaded: EventWriter<AssetsLoaded>) {
     if assets.ready() {
         ev_loaded.send(AssetsLoaded);
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct SpriteSheet {
+    texture: Handle<Image>,
+    layout: Handle<TextureAtlasLayout>,
+    frames: usize,
+}
+
+impl SpriteSheet {
+    fn new(texture: Handle<Image>, tile_size: UVec2, frames: usize, server: &AssetServer) -> Self {
+        let layout = TextureAtlasLayout::from_grid(tile_size, 1, frames as _, None, None);
+        let layout = server.add(layout);
+        Self {
+            texture,
+            layout,
+            frames,
+        }
     }
 }
 

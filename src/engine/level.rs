@@ -6,9 +6,7 @@ use bevy::math::Vec2;
 use bevy::prelude::*;
 use bevy::transform::components::Transform;
 
-use crate::model::{
-    Board, BoardCoords, Direction, GridMap, GridSet, LevelProgress, Piece, Tile, TileKind,
-};
+use crate::model::{Board, BoardCoords, GridMap, GridSet, LevelProgress, Piece, Tile, TileKind};
 
 use super::border::{spawn_horz_border, spawn_vert_border};
 use super::focus::spawn_focus;
@@ -83,13 +81,9 @@ impl Level {
                     Piece::Particle(particle) => {
                         spawn_particle(parent, particle, coords, &assets.particles)
                     }
-                    Piece::Manipulator(manipulator) => spawn_manipulator(
-                        parent,
-                        manipulator,
-                        coords,
-                        &self.present,
-                        &assets.manipulators,
-                    ),
+                    Piece::Manipulator(manipulator) => {
+                        spawn_manipulator(parent, manipulator, coords, &self.present, &assets)
+                    }
                 };
                 self.pieces.set(coords, entity);
             }
@@ -119,39 +113,18 @@ impl Level {
         self.present.copy_state_from(&self.future);
     }
 
-    pub fn move_piece(
-        &mut self,
-        from_coords: BoardCoords,
-        to_coords: BoardCoords,
-        q_piece: &mut Query<(&mut BoardCoordsHolder, &mut Transform)>,
-    ) {
+    pub fn move_piece(&mut self, from_coords: BoardCoords, to_coords: BoardCoords) {
         let entity = self.pieces.take(from_coords).unwrap();
         self.pieces.set(to_coords, entity);
-
-        let (mut coords, mut xform) = q_piece.get_mut(entity).unwrap();
-        coords.0 = to_coords;
-        xform.translation = to_coords.to_xy().extend(xform.translation.z);
-    }
-
-    pub fn move_pieces(
-        &mut self,
-        pieces: &GridSet,
-        direction: Direction,
-        q_piece: &mut Query<(&mut BoardCoordsHolder, &mut Transform)>,
-    ) {
-        pieces.for_each(direction, |from_coords| {
-            let to_coords = self.present.neighbor(from_coords, direction).unwrap();
-            self.move_piece(from_coords, to_coords, q_piece);
-            if let Some(Piece::Particle(_)) = self.present.pieces.get(to_coords) {
-                if let Some(Tile {
-                    kind: TileKind::Collector,
-                    ..
-                }) = self.present.tiles.get(to_coords)
-                {
-                    self.progress.particle_collected();
-                }
+        if let Some(Piece::Particle(_)) = self.present.pieces.get(to_coords) {
+            if let Some(Tile {
+                kind: TileKind::Collector,
+                ..
+            }) = self.present.tiles.get(to_coords)
+            {
+                self.progress.particle_collected();
             }
-        });
+        }
     }
 
     pub fn remove_piece(&mut self, coords: BoardCoords, commands: &mut Commands) {
@@ -168,6 +141,30 @@ impl Level {
     pub fn remove_pieces(&mut self, pieces: &GridSet, commands: &mut Commands) {
         for coords in pieces.iter() {
             self.remove_piece(coords, commands);
+        }
+    }
+}
+
+pub fn update_piece_coords(
+    level: Res<Level>,
+    mut q_coords: Query<&mut BoardCoordsHolder>,
+    mut q_xform: Query<&mut Transform>,
+    q_children: Query<&Children>,
+) {
+    for (coords, &anchor) in level.pieces.iter() {
+        let mut holder = q_coords.get_mut(anchor).unwrap();
+        if holder.0 == coords {
+            continue;
+        }
+        holder.0 = coords;
+
+        let mut xform = q_xform.get_mut(anchor).unwrap();
+        xform.translation = coords.to_xy().extend(xform.translation.z);
+
+        for child in q_children.iter_descendants(anchor) {
+            if let Ok(mut holder) = q_coords.get_mut(child) {
+                holder.0 = coords;
+            }
         }
     }
 }

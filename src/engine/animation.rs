@@ -7,7 +7,9 @@ use interpolation::Ease;
 
 use crate::model::{Direction, GridSet};
 
-use super::{BoardCoordsHolder, EngineCoords, EngineDirection, GameplaySet, MOVE_DURATION};
+use super::{
+    BoardCoordsHolder, EngineCoords, EngineDirection, GameplaySet, SpriteSheet, MOVE_DURATION,
+};
 
 pub struct AnimationPlugin;
 
@@ -55,6 +57,16 @@ pub struct AnimationBundle {
     fader: FadeOutAnimator,
 }
 
+#[derive(Bundle)]
+pub struct AnimatedSpriteBundle {
+    pub sprite: SpriteBundle,
+    pub atlas: TextureAtlas,
+    pub animation: IdleAnimation,
+}
+
+#[derive(Component, Debug)]
+pub struct IdleAnimation(usize);
+
 impl AnimationState {
     fn progress(&self) -> f32 {
         self.played_duration.as_secs_f32() / self.total_duration.as_secs_f32()
@@ -66,6 +78,26 @@ impl AnimationState {
 
     fn tick(&mut self, delta: Duration) {
         self.played_duration = std::cmp::min(self.played_duration + delta, self.total_duration);
+    }
+}
+
+impl AnimatedSpriteBundle {
+    pub fn new(sheet: &SpriteSheet) -> Self {
+        Self::with_defaults(sheet, Default::default())
+    }
+
+    pub fn with_defaults(sheet: &SpriteSheet, defaults: SpriteBundle) -> Self {
+        Self {
+            sprite: SpriteBundle {
+                texture: sheet.texture.clone(),
+                ..defaults
+            },
+            atlas: TextureAtlas {
+                layout: sheet.layout.clone(),
+                index: 0,
+            },
+            animation: IdleAnimation(sheet.frames),
+        }
     }
 }
 
@@ -173,6 +205,13 @@ fn animate_fade_out(
     }
 }
 
+fn animate_idle(mut q_effect: Query<(&mut TextureAtlas, &IdleAnimation)>, time: Res<Time>) {
+    let frame = (time.elapsed_seconds_wrapped().fract() * FRAME_RATE) as usize;
+    for (mut atlas, IdleAnimation(frame_count)) in q_effect.iter_mut() {
+        atlas.index = frame % frame_count;
+    }
+}
+
 impl Plugin for AnimationPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(AnimationStateHolder::default())
@@ -187,6 +226,9 @@ impl Plugin for AnimationPlugin {
             .add_systems(
                 FixedUpdate,
                 animate_fade_out.after(start_animation).in_set(AnimationSet),
-            );
+            )
+            .add_systems(FixedUpdate, animate_idle.in_set(AnimationSet));
     }
 }
+
+const FRAME_RATE: f32 = 48.0;

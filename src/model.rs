@@ -24,7 +24,7 @@ pub use level::{LevelOutcome, LevelProgress};
 pub const MAX_BOARD_ROWS: usize = 15;
 pub const MAX_BOARD_COLS: usize = 15;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter, FromRepr)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Enum, EnumIter, FromRepr)]
 #[repr(u8)]
 pub enum Tint {
     White,
@@ -41,7 +41,7 @@ pub enum Direction {
     Right,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum, EnumIter)]
 pub enum Orientation {
     Horizontal,
     Vertical,

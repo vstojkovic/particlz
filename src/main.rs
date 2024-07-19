@@ -7,6 +7,8 @@ use bevy::window::{Window, WindowPlugin};
 use bevy::DefaultPlugins;
 use bevy_egui::EguiPlugin;
 use engine::gui::GuiPlugin;
+use engine::level::update_piece_coords;
+use engine::particle::{collect_particles, ParticleCollected};
 use engine::AssetsPlugin;
 
 mod engine;
@@ -19,7 +21,7 @@ use self::engine::beam::{BeamPlugin, BeamSet, MoveBeams, ResetBeams};
 use self::engine::focus::{get_focus, Focus, FocusPlugin, UpdateFocusEvent};
 use self::engine::input::{InputPlugin, MoveManipulatorEvent, SelectManipulatorEvent};
 use self::engine::level::Level;
-use self::engine::{AssetsLoaded, BoardCoordsHolder, GameAssets, GameState, GameplaySet};
+use self::engine::{AssetsLoaded, GameAssets, GameState, GameplaySet};
 use self::model::{
     Board, Border, Emitters, LevelOutcome, Manipulator, Particle, Piece, Tile, TileKind, Tint,
 };
@@ -46,6 +48,7 @@ fn main() {
         .add_plugins(AnimationPlugin)
         .add_plugins(FocusPlugin)
         .add_plugins(BeamPlugin)
+        .add_event::<ParticleCollected>()
         .configure_sets(
             FixedPreUpdate,
             GameplaySet.run_if(in_state(GameState::Playing)),
@@ -74,9 +77,18 @@ fn main() {
                     .pipe(finish_animation)
                     .after(AnimationSet)
                     .in_set(GameplaySet),
+                update_piece_coords
+                    .after(finish_animation)
+                    .in_set(GameplaySet),
             ),
         )
-        .add_systems(FixedPostUpdate, check_game_over.in_set(GameplaySet))
+        .add_systems(
+            FixedPostUpdate,
+            (
+                check_game_over.in_set(GameplaySet),
+                collect_particles.in_set(GameplaySet),
+            ),
+        )
         .add_systems(OnEnter(GameState::GameOver), game_over)
         .run();
 }
@@ -90,9 +102,15 @@ fn finish_init(
     }
 }
 
-fn setup_board(mut commands: Commands, mut level: ResMut<Level>, assets: Res<GameAssets>) {
+fn setup_board(
+    mut commands: Commands,
+    mut level: ResMut<Level>,
+    assets: Res<GameAssets>,
+    mut ev_retarget: EventWriter<ResetBeams>,
+) {
     commands.spawn(Camera2dBundle::default());
     level.spawn(&mut commands, &assets);
+    ev_retarget.send(ResetBeams);
 }
 
 fn select_manipulator(
@@ -156,9 +174,9 @@ fn finish_animation(
     mut ev_start_animation: EventWriter<StartAnimation>,
     mut ev_retarget: EventWriter<ResetBeams>,
     mut ev_update_focus: EventWriter<UpdateFocusEvent>,
+    mut ev_collected: EventWriter<ParticleCollected>,
     mut level: ResMut<Level>,
     mut commands: Commands,
-    mut q_piece: Query<(&mut BoardCoordsHolder, &mut Transform), Without<Focus>>,
 ) {
     let Some(AnimationFinished(animation, pieces)) = ev_animation_finished.read().last() else {
         return;
@@ -168,7 +186,21 @@ fn finish_animation(
 
     match animation {
         Animation::Movement(direction) => {
-            level.move_pieces(pieces, *direction, &mut q_piece.transmute_lens().query());
+            pieces.for_each(*direction, |from_coords| {
+                let to_coords = level.present.neighbor(from_coords, *direction).unwrap();
+                level.move_piece(from_coords, to_coords);
+                if let Some(Piece::Particle(_)) = level.present.pieces.get(to_coords) {
+                    if let Some(Tile {
+                        kind: TileKind::Collector,
+                        ..
+                    }) = level.present.tiles.get(to_coords)
+                    {
+                        ev_collected.send(ParticleCollected(
+                            level.pieces.get(to_coords).copied().unwrap(),
+                        ));
+                    }
+                }
+            });
 
             let focus_coords = level
                 .present

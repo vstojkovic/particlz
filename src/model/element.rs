@@ -1,4 +1,4 @@
-use enum_map::EnumMap;
+use enum_map::{Enum, EnumMap};
 use enumset::{enum_set, EnumSet};
 use strum_macros::{EnumIter, FromRepr};
 
@@ -10,7 +10,7 @@ pub struct Tile {
     pub tint: Tint,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter, FromRepr)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Enum, EnumIter, FromRepr)]
 #[repr(u8)]
 pub enum TileKind {
     Platform,
@@ -40,7 +40,7 @@ pub struct Manipulator {
     targets: EnumMap<Direction, Option<BeamTarget>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter, FromRepr)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Enum, EnumIter, FromRepr)]
 #[repr(u8)]
 pub enum Emitters {
     Left,

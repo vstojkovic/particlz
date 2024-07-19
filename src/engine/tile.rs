@@ -1,21 +1,24 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use bevy::asset::{AssetServer, Handle};
 use bevy::ecs::bundle::Bundle;
 use bevy::ecs::entity::Entity;
-use bevy::hierarchy::ChildBuilder;
+use bevy::hierarchy::{BuildChildren, ChildBuilder};
+use bevy::prelude::*;
 use bevy::render::texture::Image;
 use bevy::sprite::SpriteBundle;
 use bevy::transform::components::Transform;
+use enum_map::EnumMap;
 use strum::IntoEnumIterator;
 
 use crate::model::{BoardCoords, Tile, TileKind, Tint};
 
-use super::{BoardCoordsHolder, EngineCoords};
+use super::animation::AnimatedSpriteBundle;
+use super::{BoardCoordsHolder, EngineCoords, SpriteSheet};
 
 pub struct TileAssets {
-    textures: HashMap<(TileKind, Tint), Handle<Image>>,
+    textures: EnumMap<TileKind, EnumMap<Tint, Handle<Image>>>,
+    collector_pulse: SpriteSheet,
 }
 
 #[derive(Bundle)]
@@ -26,7 +29,7 @@ struct TileBundle {
 
 impl TileAssets {
     pub fn load(server: &AssetServer, barrier: &Arc<()>) -> Self {
-        let mut textures = HashMap::new();
+        let mut textures = EnumMap::<TileKind, EnumMap<Tint, Handle<Image>>>::default();
         for kind in TileKind::iter() {
             let kind_part = match kind {
                 TileKind::Platform => "platform",
@@ -39,23 +42,27 @@ impl TileAssets {
                     Tint::Yellow => "yellow",
                     Tint::Red => "red",
                 };
-                textures.insert(
-                    (kind, tint),
-                    server.load_acquire(
-                        format!("{}-{}.png", kind_part, tint_part),
-                        Arc::clone(&barrier),
-                    ),
+                textures[kind][tint] = server.load_acquire(
+                    format!("{}-{}.png", kind_part, tint_part),
+                    Arc::clone(&barrier),
                 );
             }
         }
-        Self { textures }
+
+        let texture = server.load_acquire("collector-pulse.png", Arc::clone(&barrier));
+        let collector_pulse = SpriteSheet::new(texture, UVec2::splat(20), 48, server);
+
+        Self {
+            textures,
+            collector_pulse,
+        }
     }
 }
 
 impl TileBundle {
     fn new(tile: &Tile, coords: BoardCoords, assets: &TileAssets) -> Self {
         let coords = BoardCoordsHolder(coords);
-        let texture = assets.textures[&(tile.kind, tile.tint)].clone();
+        let texture = assets.textures[tile.kind][tile.tint].clone();
         Self {
             coords,
             sprite: SpriteBundle {
@@ -76,7 +83,13 @@ pub fn spawn_tile(
     coords: BoardCoords,
     assets: &TileAssets,
 ) -> Entity {
-    parent.spawn(TileBundle::new(tile, coords, assets)).id()
+    let mut tile_entity = parent.spawn(TileBundle::new(tile, coords, assets));
+    if tile.kind == TileKind::Collector {
+        tile_entity.with_children(|parent| {
+            parent.spawn(AnimatedSpriteBundle::new(&assets.collector_pulse));
+        });
+    }
+    tile_entity.id()
 }
 
 const Z_LAYER: f32 = 0.0;
