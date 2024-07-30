@@ -8,7 +8,8 @@ use interpolation::Ease;
 use crate::model::{Direction, GridSet};
 
 use super::{
-    BoardCoordsHolder, EngineCoords, EngineDirection, GameplaySet, SpriteSheet, MOVE_DURATION,
+    BoardCoordsHolder, EngineCoords, EngineDirection, GameplaySet, InLevelSet, SpriteSheet,
+    MOVE_DURATION,
 };
 
 pub struct AnimationPlugin;
@@ -21,6 +22,9 @@ pub enum Animation {
 
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AnimationSet;
+
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct IdleAnimationSet;
 
 #[derive(Resource, Debug, Default)]
 struct AnimationStateHolder(Option<AnimationState>);
@@ -218,6 +222,7 @@ impl Plugin for AnimationPlugin {
             .add_event::<StartAnimation>()
             .add_event::<AnimationFinished>()
             .configure_sets(FixedUpdate, AnimationSet.in_set(GameplaySet))
+            .configure_sets(FixedUpdate, IdleAnimationSet.in_set(InLevelSet))
             .add_systems(FixedUpdate, start_animation.in_set(AnimationSet))
             .add_systems(
                 FixedUpdate,
@@ -227,7 +232,7 @@ impl Plugin for AnimationPlugin {
                 FixedUpdate,
                 animate_fade_out.after(start_animation).in_set(AnimationSet),
             )
-            .add_systems(FixedUpdate, animate_idle.in_set(AnimationSet));
+            .add_systems(FixedUpdate, animate_idle.in_set(IdleAnimationSet));
     }
 }
 

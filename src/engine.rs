@@ -1,9 +1,8 @@
 //! Engine-specific game data and logic
 
-use std::sync::{Arc, Weak};
+use std::sync::{Arc, Once, Weak};
 use std::time::Duration;
 
-use beam::BeamAssets;
 use bevy::asset::AssetServer;
 use bevy::ecs::component::Component;
 use bevy::ecs::system::Resource;
@@ -23,6 +22,7 @@ pub mod tile;
 
 use crate::model::{BoardCoords, Direction};
 
+use self::beam::BeamAssets;
 use self::border::BorderAssets;
 use self::focus::FocusAssets;
 use self::gui::GuiAssets;
@@ -40,9 +40,27 @@ pub enum GameState {
     #[default]
     Init,
     MainMenu,
+    ClassicLevelSelect,
     Playing,
     GameOver,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct InLevel;
+
+impl ComputedStates for InLevel {
+    type SourceStates = GameState;
+
+    fn compute(sources: Self::SourceStates) -> Option<Self> {
+        match sources {
+            GameState::Playing | GameState::GameOver => Some(Self),
+            _ => None,
+        }
+    }
+}
+
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct InLevelSet;
 
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct GameplaySet;
@@ -55,6 +73,7 @@ pub struct AssetsPlugin;
 #[derive(Resource)]
 pub struct GameAssets {
     load_barrier: Weak<()>,
+    event_trigger: Once,
     gui: GuiAssets,
     tiles: TileAssets,
     borders: BorderAssets,
@@ -72,6 +91,7 @@ impl GameAssets {
         let load_barrier = Arc::new(());
         Self {
             load_barrier: Arc::downgrade(&load_barrier),
+            event_trigger: Once::new(),
             gui: GuiAssets::load(server, &load_barrier),
             tiles: TileAssets::load(server, &load_barrier),
             borders: BorderAssets::load(server, &load_barrier),
@@ -93,7 +113,9 @@ fn load_assets(mut commands: Commands, server: Res<AssetServer>) {
 
 fn monitor_load(assets: Res<GameAssets>, mut ev_loaded: EventWriter<AssetsLoaded>) {
     if assets.ready() {
-        ev_loaded.send(AssetsLoaded);
+        assets.event_trigger.call_once(|| {
+            ev_loaded.send(AssetsLoaded);
+        });
     }
 }
 

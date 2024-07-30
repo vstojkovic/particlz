@@ -1,4 +1,4 @@
-use bevy::app::{App, AppExit};
+use bevy::app::App;
 use bevy::core_pipeline::core_2d::Camera2dBundle;
 use bevy::ecs::schedule::IntoSystemConfigs;
 use bevy::ecs::system::{Commands, Res, ResMut};
@@ -6,10 +6,6 @@ use bevy::prelude::*;
 use bevy::window::{Window, WindowPlugin};
 use bevy::DefaultPlugins;
 use bevy_egui::EguiPlugin;
-use engine::gui::GuiPlugin;
-use engine::level::update_piece_coords;
-use engine::particle::{collect_particles, ParticleCollected};
-use engine::AssetsPlugin;
 
 mod engine;
 mod model;
@@ -19,19 +15,16 @@ use self::engine::animation::{
 };
 use self::engine::beam::{BeamPlugin, BeamSet, MoveBeams, ResetBeams};
 use self::engine::focus::{get_focus, Focus, FocusPlugin, UpdateFocusEvent};
+use self::engine::gui::{GuiPlugin, PlayLevel};
 use self::engine::input::{InputPlugin, MoveManipulatorEvent, SelectManipulatorEvent};
-use self::engine::level::Level;
-use self::engine::{AssetsLoaded, GameAssets, GameState, GameplaySet};
-use self::model::{
-    Board, Border, Emitters, LevelOutcome, Manipulator, Particle, Piece, Tile, TileKind, Tint,
+use self::engine::level::{update_piece_coords, Level};
+use self::engine::particle::{collect_particles, ParticleCollected};
+use self::engine::{
+    AssetsLoaded, AssetsPlugin, GameAssets, GameState, GameplaySet, InLevel, InLevelSet,
 };
+use self::model::{Board, Piece, Tile, TileKind};
 
 fn main() {
-    let board = if let Some(code) = std::env::args().nth(1) {
-        Board::from_pbc1(&code).unwrap()
-    } else {
-        make_test_board()
-    };
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
@@ -41,6 +34,7 @@ fn main() {
             ..Default::default()
         }))
         .init_state::<GameState>()
+        .add_computed_state::<InLevel>()
         .add_plugins(EguiPlugin)
         .add_plugins(GuiPlugin)
         .add_plugins(AssetsPlugin)
@@ -61,8 +55,14 @@ fn main() {
             FixedPostUpdate,
             GameplaySet.run_if(in_state(GameState::Playing)),
         )
-        .insert_resource(Level::new(board))
+        .configure_sets(FixedPreUpdate, InLevelSet.run_if(in_state(InLevel)))
+        .configure_sets(FixedUpdate, InLevelSet.run_if(in_state(InLevel)))
+        .configure_sets(FixedPostUpdate, InLevelSet.run_if(in_state(InLevel)))
         .add_systems(Update, finish_init.run_if(in_state(GameState::Init)))
+        .add_systems(
+            Update,
+            start_level.run_if(not(in_state(GameState::Playing))),
+        )
         .add_systems(OnEnter(GameState::Playing), setup_board)
         .add_systems(
             FixedUpdate,
@@ -89,17 +89,46 @@ fn main() {
                 collect_particles.in_set(GameplaySet),
             ),
         )
-        .add_systems(OnEnter(GameState::GameOver), game_over)
+        .add_systems(OnExit(InLevel), remove_level)
         .run();
 }
 
 fn finish_init(
     mut ev_loaded: EventReader<AssetsLoaded>,
     mut next_state: ResMut<NextState<GameState>>,
+    mut commands: Commands,
+    mut ev_play: EventWriter<PlayLevel>,
 ) {
-    if ev_loaded.read().last().is_some() {
-        next_state.set(GameState::MainMenu);
+    if ev_loaded.read().last().is_none() {
+        return;
     }
+
+    let mut camera = Camera2dBundle::default();
+    camera.projection.viewport_origin = Vec2::new(0.0, 1.0);
+    commands.spawn(camera);
+
+    if let Some(code) = std::env::args().nth(1) {
+        match Board::from_pbc1(&code) {
+            Ok(board) => {
+                ev_play.send(PlayLevel(board));
+                return;
+            }
+            Err(err) => bevy::log::error!("Invalid custom level code: {}", err),
+        }
+    }
+    next_state.set(GameState::MainMenu);
+}
+
+fn start_level(
+    mut ev_play: EventReader<PlayLevel>,
+    mut commands: Commands,
+    mut next_state: ResMut<NextState<GameState>>,
+) {
+    let Some(level_event) = ev_play.read().last() else {
+        return;
+    };
+    commands.insert_resource(Level::new(level_event.0.clone()));
+    next_state.set(GameState::Playing);
 }
 
 fn setup_board(
@@ -108,9 +137,6 @@ fn setup_board(
     assets: Res<GameAssets>,
     mut ev_retarget: EventWriter<ResetBeams>,
 ) {
-    let mut camera = Camera2dBundle::default();
-    camera.projection.viewport_origin = Vec2::new(0.0, 1.0);
-    commands.spawn(camera);
     level.spawn(&mut commands, &assets);
     ev_retarget.send(ResetBeams);
 }
@@ -244,66 +270,7 @@ fn check_game_over(level: Res<Level>, mut next_state: ResMut<NextState<GameState
     }
 }
 
-fn game_over(level: Res<Level>, mut exit: EventWriter<AppExit>) {
-    let outcome_text = match level.progress.outcome.unwrap() {
-        LevelOutcome::NoManipulatorsLeft => "you have no manipulators left",
-        LevelOutcome::ParticleLost => "you lost a particle",
-        LevelOutcome::Victory => "you beat the level",
-    };
-    bevy::log::info!("Game over: {}", outcome_text);
-    exit.send(AppExit::Success);
-}
-
-fn make_test_board() -> Board {
-    fn add_tile(board: &mut Board, row: usize, col: usize, kind: TileKind, tint: Tint) {
-        board.tiles.set((row, col).into(), Tile::new(kind, tint));
-    }
-
-    fn add_horz_border(board: &mut Board, row: usize, col: usize, border: Border) {
-        board.horz_borders.set((row, col).into(), border);
-    }
-
-    fn add_vert_border(board: &mut Board, row: usize, col: usize, border: Border) {
-        board.vert_borders.set((row, col).into(), border);
-    }
-
-    fn add_piece<P: Into<Option<Piece>>>(board: &mut Board, row: usize, col: usize, piece: P) {
-        board.pieces.set((row, col).into(), piece.into());
-    }
-
-    let mut board = Board::new(5, 5);
-    add_tile(&mut board, 0, 0, TileKind::Platform, Tint::White);
-    add_tile(&mut board, 0, 1, TileKind::Platform, Tint::Green);
-    add_tile(&mut board, 0, 2, TileKind::Platform, Tint::Yellow);
-    add_tile(&mut board, 0, 3, TileKind::Platform, Tint::Red);
-    for row in 1..=3 {
-        for col in 0..=4 {
-            add_tile(&mut board, row, col, TileKind::Platform, Tint::White);
-        }
-    }
-    add_tile(&mut board, 4, 4, TileKind::Collector, Tint::White);
-    add_tile(&mut board, 4, 3, TileKind::Collector, Tint::Green);
-    add_tile(&mut board, 4, 2, TileKind::Collector, Tint::Yellow);
-    add_tile(&mut board, 4, 1, TileKind::Collector, Tint::Red);
-    add_horz_border(&mut board, 0, 0, Border::Wall);
-    add_horz_border(&mut board, 1, 0, Border::Wall);
-    add_horz_border(&mut board, 4, 4, Border::Window);
-    add_horz_border(&mut board, 5, 4, Border::Window);
-    add_vert_border(&mut board, 0, 0, Border::Window);
-    add_vert_border(&mut board, 4, 5, Border::Wall);
-    add_piece(&mut board, 1, 1, Particle::new(Tint::Green));
-    add_piece(&mut board, 1, 2, Particle::new(Tint::Yellow));
-    add_piece(&mut board, 1, 3, Particle::new(Tint::Red));
-    add_piece(&mut board, 2, 0, Manipulator::new(Emitters::Left));
-    add_piece(&mut board, 2, 1, Manipulator::new(Emitters::Up));
-    add_piece(&mut board, 2, 2, Manipulator::new(Emitters::Right));
-    add_piece(&mut board, 2, 3, Manipulator::new(Emitters::Down));
-    add_piece(&mut board, 2, 4, Manipulator::new(Emitters::LeftRight));
-    add_piece(&mut board, 3, 0, Manipulator::new(Emitters::LeftUp));
-    add_piece(&mut board, 3, 1, Manipulator::new(Emitters::LeftDown));
-    add_piece(&mut board, 3, 2, Manipulator::new(Emitters::RightUp));
-    add_piece(&mut board, 3, 3, Manipulator::new(Emitters::RightDown));
-    add_piece(&mut board, 3, 4, Manipulator::new(Emitters::UpDown));
-    board.retarget_beams();
-    board
+fn remove_level(mut level: ResMut<Level>, mut commands: Commands) {
+    level.despawn(&mut commands);
+    commands.remove_resource::<Level>();
 }

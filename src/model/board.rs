@@ -16,6 +16,7 @@ pub struct Board {
 }
 
 impl Board {
+    #[cfg(test)]
     pub fn new(rows: usize, cols: usize) -> Self {
         let dims = Dimensions::new(rows, cols);
         let tiles = GridMap::new(rows, cols);

@@ -19,7 +19,7 @@ use super::{BoardCoordsHolder, EngineCoords, GameAssets};
 pub struct Level {
     pub present: Board,
     pub future: Board,
-    pub parent: Entity,
+    pub parent: Option<Entity>,
     pub tiles: GridMap<Entity>,
     pub horz_borders: GridMap<Entity>,
     pub vert_borders: GridMap<Entity>,
@@ -44,7 +44,7 @@ impl Level {
         Self {
             present,
             future,
-            parent: Entity::PLACEHOLDER,
+            parent: None,
             tiles,
             horz_borders,
             vert_borders,
@@ -54,8 +54,12 @@ impl Level {
     }
 
     pub fn spawn(&mut self, commands: &mut Commands, assets: &GameAssets) {
+        if self.parent.is_some() {
+            self.despawn(commands);
+        }
+
         let mut parent = commands.spawn(BoardBundle::default());
-        self.parent = parent.id();
+        self.parent = Some(parent.id());
         parent.with_children(|parent| {
             for (coords, tile) in self.present.tiles.iter() {
                 self.tiles
@@ -92,12 +96,16 @@ impl Level {
         });
     }
 
+    pub fn despawn(&mut self, commands: &mut Commands) {
+        commands.entity(self.parent.unwrap()).despawn_recursive();
+    }
+
     pub fn coords_at_pos(
         &self,
         pos: Vec2,
         q_xform: &Query<&Transform>,
     ) -> Option<(BoardCoords, Vec2)> {
-        let xform = q_xform.get(self.parent).unwrap();
+        let xform = q_xform.get(self.parent.unwrap()).unwrap();
         let origin = xform.translation.truncate();
         let pos = pos - origin;
         let coords = BoardCoords::from_xy(pos)?;
