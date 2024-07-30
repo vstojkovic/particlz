@@ -32,6 +32,7 @@ use self::tile::TileAssets;
 
 const TILE_WIDTH: f32 = 45.0;
 const TILE_HEIGHT: f32 = 45.0;
+const COORDS_ORIGIN_OFFSET: Vec2 = Vec2 { x: 45.0, y: -45.0 };
 const MOVE_DURATION: Duration = Duration::from_millis(500);
 
 #[derive(States, Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
@@ -122,7 +123,7 @@ trait EngineCoords: Sized {
 
 impl EngineCoords for BoardCoords {
     fn from_xy(pos: Vec2) -> Option<Self> {
-        let pos = pos + Vec2::new(TILE_WIDTH, -TILE_HEIGHT) / 2.0;
+        let pos = pos - COORDS_ORIGIN_OFFSET + Vec2::new(TILE_WIDTH, -TILE_HEIGHT) / 2.0;
         if pos.x < 0.0 || pos.y > 0.0 {
             return None;
         }
@@ -135,7 +136,7 @@ impl EngineCoords for BoardCoords {
         Vec2 {
             x: (self.col as f32) * TILE_WIDTH,
             y: -(self.row as f32) * TILE_HEIGHT,
-        }
+        } + COORDS_ORIGIN_OFFSET
     }
 }
 

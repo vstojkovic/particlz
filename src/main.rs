@@ -108,7 +108,9 @@ fn setup_board(
     assets: Res<GameAssets>,
     mut ev_retarget: EventWriter<ResetBeams>,
 ) {
-    commands.spawn(Camera2dBundle::default());
+    let mut camera = Camera2dBundle::default();
+    camera.projection.viewport_origin = Vec2::new(0.0, 1.0);
+    commands.spawn(camera);
     level.spawn(&mut commands, &assets);
     ev_retarget.send(ResetBeams);
 }
