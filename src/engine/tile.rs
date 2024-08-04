@@ -86,10 +86,21 @@ pub fn spawn_tile(
     let mut tile_entity = parent.spawn(TileBundle::new(tile, coords, assets));
     if tile.kind == TileKind::Collector {
         tile_entity.with_children(|parent| {
-            parent.spawn(AnimatedSpriteBundle::new(&assets.collector_pulse));
+            let sprite = SpriteBundle {
+                transform: Transform {
+                    translation: Vec2::ZERO.extend(REL_Z_LAYER_PULSE),
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            parent.spawn(AnimatedSpriteBundle::with_defaults(
+                &assets.collector_pulse,
+                sprite,
+            ));
         });
     }
     tile_entity.id()
 }
 
 const Z_LAYER: f32 = 0.0;
+const REL_Z_LAYER_PULSE: f32 = 1.0;
