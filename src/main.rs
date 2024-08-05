@@ -3,7 +3,7 @@ use bevy::core_pipeline::core_2d::Camera2dBundle;
 use bevy::ecs::schedule::IntoSystemConfigs;
 use bevy::ecs::system::{Commands, Res, ResMut};
 use bevy::prelude::*;
-use bevy::window::{Window, WindowPlugin};
+use bevy::window::{Window, WindowPlugin, WindowResolution};
 use bevy::DefaultPlugins;
 use bevy_egui::EguiPlugin;
 
@@ -15,8 +15,8 @@ use self::engine::animation::{
 };
 use self::engine::beam::{BeamPlugin, BeamSet, MoveBeams, ResetBeams};
 use self::engine::focus::{get_focus, Focus, FocusPlugin, UpdateFocusEvent};
-use self::engine::gui::{GuiPlugin, PlayLevel};
-use self::engine::input::{InputPlugin, MoveManipulatorEvent, SelectManipulatorEvent};
+use self::engine::gui::{GuiPlugin, PlayLevel, UndoMoves};
+use self::engine::input::{InputPlugin, InputSet, MoveManipulatorEvent, SelectManipulatorEvent};
 use self::engine::level::{update_piece_coords, Level};
 use self::engine::particle::{collect_particles, ParticleCollected};
 use self::engine::{
@@ -29,6 +29,7 @@ fn main() {
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "Particlz".into(),
+                resolution: WindowResolution::new(800.0, 600.0),
                 ..Default::default()
             }),
             ..Default::default()
@@ -64,6 +65,10 @@ fn main() {
             start_level.run_if(not(in_state(GameState::Playing))),
         )
         .add_systems(OnEnter(GameState::Playing), setup_board)
+        .add_systems(
+            FixedPreUpdate,
+            undo_moves.in_set(InLevelSet).before(InputSet),
+        )
         .add_systems(
             FixedUpdate,
             (
@@ -182,8 +187,7 @@ fn move_manipulator(
     let direction = event.0;
 
     let move_set = level.present.compute_move_set(leader, direction);
-    level.future.move_pieces(&move_set, direction);
-    level.future.retarget_beams();
+    level.prepare_move(&move_set, direction);
 
     ev_start_animation.send(StartAnimation(
         Animation::Movement(direction),
@@ -268,6 +272,26 @@ fn check_game_over(level: Res<Level>, mut next_state: ResMut<NextState<GameState
     if level.progress.outcome.is_some() {
         next_state.set(GameState::GameOver);
     }
+}
+
+fn undo_moves(
+    mut ev_undo: EventReader<UndoMoves>,
+    mut level: ResMut<Level>,
+    mut commands: Commands,
+    assets: Res<GameAssets>,
+    mut ev_retarget: EventWriter<ResetBeams>,
+) {
+    if ev_undo.is_empty() {
+        return;
+    }
+    for undo in ev_undo.read() {
+        match undo {
+            UndoMoves::Last => level.undo(),
+            UndoMoves::All => level.reset(),
+        }
+    }
+    level.spawn(&mut commands, &assets);
+    ev_retarget.send(ResetBeams);
 }
 
 fn remove_level(mut level: ResMut<Level>, mut commands: Commands) {

@@ -6,16 +6,19 @@ use bevy_egui::{egui, EguiContexts};
 
 use crate::model::Board;
 
-use super::{AssetsLoaded, GameAssets, GameState};
+use super::focus::get_focus;
+use super::{AssetsLoaded, GameAssets, GameState, InLevel};
 
 mod classic_campaign;
 mod font;
 mod game_over;
+mod in_game;
 mod main_menu;
 
 use self::classic_campaign::classic_level_select_ui;
 use self::font::{EguiFontAsset, EguiFontAssetLoader};
 use self::game_over::game_over_ui;
+use self::in_game::in_game_ui;
 use self::main_menu::main_menu_ui;
 
 pub struct GuiPlugin;
@@ -27,6 +30,12 @@ pub struct GuiAssets {
 
 #[derive(Event)]
 pub struct PlayLevel(pub Board);
+
+#[derive(Event)]
+pub enum UndoMoves {
+    Last,
+    All,
+}
 
 impl GuiAssets {
     pub fn load(server: &AssetServer, barrier: &Arc<()>) -> Self {
@@ -104,12 +113,14 @@ impl Plugin for GuiPlugin {
         app.init_asset::<EguiFontAsset>()
             .init_asset_loader::<EguiFontAssetLoader>()
             .add_event::<PlayLevel>()
+            .add_event::<UndoMoves>()
             .add_systems(Update, setup_gui_ctx.run_if(in_state(GameState::Init)))
             .add_systems(Update, main_menu_ui.run_if(in_state(GameState::MainMenu)))
             .add_systems(
                 Update,
                 classic_level_select_ui.run_if(in_state(GameState::ClassicLevelSelect)),
             )
+            .add_systems(Update, get_focus.pipe(in_game_ui).run_if(in_state(InLevel)))
             .add_systems(Update, game_over_ui.run_if(in_state(GameState::GameOver)));
     }
 }

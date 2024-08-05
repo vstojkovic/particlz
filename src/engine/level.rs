@@ -6,7 +6,9 @@ use bevy::math::Vec2;
 use bevy::prelude::*;
 use bevy::transform::components::Transform;
 
-use crate::model::{Board, BoardCoords, GridMap, GridSet, LevelProgress, Piece, Tile, TileKind};
+use crate::model::{
+    Board, BoardCoords, Direction, GridMap, GridSet, LevelProgress, Piece, Tile, TileKind,
+};
 
 use super::border::{spawn_horz_border, spawn_vert_border};
 use super::focus::spawn_focus;
@@ -19,6 +21,7 @@ use super::{BoardCoordsHolder, EngineCoords, GameAssets};
 pub struct Level {
     pub present: Board,
     pub future: Board,
+    pub past: Vec<Board>,
     pub parent: Option<Entity>,
     pub tiles: GridMap<Entity>,
     pub horz_borders: GridMap<Entity>,
@@ -44,6 +47,7 @@ impl Level {
         Self {
             present,
             future,
+            past: vec![],
             parent: None,
             tiles,
             horz_borders,
@@ -61,11 +65,13 @@ impl Level {
         let mut parent = commands.spawn(BoardBundle::default());
         self.parent = Some(parent.id());
         parent.with_children(|parent| {
+            self.tiles.clear();
             for (coords, tile) in self.present.tiles.iter() {
                 self.tiles
                     .set(coords, spawn_tile(parent, tile, coords, &assets.tiles));
             }
 
+            self.horz_borders.clear();
             for (coords, border) in self.present.horz_borders.iter() {
                 self.horz_borders.set(
                     coords,
@@ -73,6 +79,7 @@ impl Level {
                 );
             }
 
+            self.vert_borders.clear();
             for (coords, border) in self.present.vert_borders.iter() {
                 self.vert_borders.set(
                     coords,
@@ -80,6 +87,7 @@ impl Level {
                 );
             }
 
+            self.pieces.clear();
             for (coords, piece) in self.present.pieces.iter() {
                 let entity = match piece {
                     Piece::Particle(particle) => {
@@ -97,7 +105,9 @@ impl Level {
     }
 
     pub fn despawn(&mut self, commands: &mut Commands) {
-        commands.entity(self.parent.unwrap()).despawn_recursive();
+        commands
+            .entity(self.parent.take().unwrap())
+            .despawn_recursive();
     }
 
     pub fn coords_at_pos(
@@ -119,6 +129,29 @@ impl Level {
 
     pub fn update_present(&mut self) {
         self.present.copy_state_from(&self.future);
+    }
+
+    pub fn can_undo(&self) -> bool {
+        !self.past.is_empty()
+    }
+
+    pub fn undo(&mut self) {
+        if let Some(board) = self.past.pop() {
+            self.present.copy_state_from(&board);
+            self.future.copy_state_from(&self.present);
+            self.progress = LevelProgress::new(&self.present);
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.past.truncate(1);
+        self.undo();
+    }
+
+    pub fn prepare_move(&mut self, move_set: &GridSet, direction: Direction) {
+        self.past.push(self.present.clone());
+        self.future.move_pieces(&move_set, direction);
+        self.future.retarget_beams();
     }
 
     pub fn move_piece(&mut self, from_coords: BoardCoords, to_coords: BoardCoords) {

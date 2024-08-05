@@ -61,6 +61,10 @@ impl<T: Clone> GridMap<T> {
         self.cells[self.dims.index(coords)].take()
     }
 
+    pub fn clear(&mut self) {
+        self.cells.iter_mut().for_each(|cell| *cell = None);
+    }
+
     pub fn mirror(&mut self, other: &Self) {
         assert_eq!(self.dims, other.dims);
         self.cells.clear();
