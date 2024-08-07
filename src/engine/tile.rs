@@ -3,6 +3,7 @@ use std::sync::Arc;
 use bevy::asset::{AssetServer, Handle};
 use bevy::ecs::bundle::Bundle;
 use bevy::ecs::entity::Entity;
+use bevy::ecs::system::EntityCommands;
 use bevy::hierarchy::{BuildChildren, ChildBuilder};
 use bevy::prelude::*;
 use bevy::render::texture::Image;
@@ -14,7 +15,7 @@ use strum::IntoEnumIterator;
 use crate::model::{BoardCoords, Tile, TileKind, Tint};
 
 use super::animation::AnimatedSpriteBundle;
-use super::{BoardCoordsHolder, EngineCoords, SpriteSheet};
+use super::{BoardCoordsHolder, EngineCoords, Mutable, SpriteSheet};
 
 pub struct TileAssets {
     textures: EnumMap<TileKind, EnumMap<Tint, Handle<Image>>>,
@@ -82,6 +83,7 @@ pub fn spawn_tile(
     tile: &Tile,
     coords: BoardCoords,
     assets: &TileAssets,
+    mutator: &impl Fn(&mut EntityCommands),
 ) -> Entity {
     let mut tile_entity = parent.spawn(TileBundle::new(tile, coords, assets));
     if tile.kind == TileKind::Collector {
@@ -93,13 +95,15 @@ pub fn spawn_tile(
                 },
                 ..Default::default()
             };
-            parent.spawn(AnimatedSpriteBundle::with_defaults(
-                &assets.collector_pulse,
-                sprite,
-            ));
+            parent
+                .spawn(AnimatedSpriteBundle::with_defaults(
+                    &assets.collector_pulse,
+                    sprite,
+                ))
+                .mutate(mutator);
         });
     }
-    tile_entity.id()
+    tile_entity.mutate(mutator).id()
 }
 
 const Z_LAYER: f32 = 0.0;

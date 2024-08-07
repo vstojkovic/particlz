@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use bevy::asset::AssetServer;
 use bevy::ecs::component::Component;
-use bevy::ecs::system::Resource;
+use bevy::ecs::system::{EntityCommands, Resource};
 use bevy::math::Vec2;
 use bevy::prelude::*;
 
@@ -64,6 +64,9 @@ pub struct InLevelSet;
 
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct GameplaySet;
+
+#[derive(Component)]
+pub struct MainCamera;
 
 #[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct BoardCoordsHolder(pub BoardCoords);
@@ -137,6 +140,15 @@ impl SpriteSheet {
         }
     }
 }
+
+trait Mutable: Sized {
+    fn mutate(mut self, mutator: &impl Fn(&mut Self)) -> Self {
+        mutator(&mut self);
+        self
+    }
+}
+
+impl Mutable for EntityCommands<'_> {}
 
 trait EngineCoords: Sized {
     fn from_xy(pos: Vec2) -> Option<Self>;

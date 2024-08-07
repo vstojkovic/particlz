@@ -1,13 +1,14 @@
 use bevy::ecs::bundle::Bundle;
 use bevy::ecs::entity::Entity;
-use bevy::ecs::system::{Commands, Query, Resource};
+use bevy::ecs::system::{Commands, EntityCommands, Query, Resource};
 use bevy::hierarchy::{BuildChildren, DespawnRecursiveExt};
 use bevy::math::Vec2;
 use bevy::prelude::*;
 use bevy::transform::components::Transform;
 
 use crate::model::{
-    Board, BoardCoords, Direction, GridMap, GridSet, LevelProgress, Piece, Tile, TileKind,
+    Board, BoardCoords, Direction, GridMap, GridSet, LevelCampaign, LevelMetadata, LevelProgress,
+    Piece, Tile, TileKind,
 };
 
 use super::border::{spawn_horz_border, spawn_vert_border};
@@ -15,10 +16,11 @@ use super::focus::spawn_focus;
 use super::manipulator::spawn_manipulator;
 use super::particle::spawn_particle;
 use super::tile::spawn_tile;
-use super::{BoardCoordsHolder, EngineCoords, GameAssets};
+use super::{BoardCoordsHolder, EngineCoords, GameAssets, Mutable};
 
 #[derive(Resource)]
 pub struct Level {
+    pub metadata: LevelMetadata,
     pub present: Board,
     pub future: Board,
     pub past: Vec<Board>,
@@ -35,8 +37,11 @@ struct BoardBundle {
     spatial: SpatialBundle,
 }
 
+#[derive(Resource, Deref)]
+pub struct Campaign(pub LevelCampaign);
+
 impl Level {
-    pub fn new(board: Board) -> Self {
+    pub fn new(board: Board, metadata: LevelMetadata) -> Self {
         let present = board;
         let future = present.clone();
         let tiles = GridMap::like(&present.tiles);
@@ -45,6 +50,7 @@ impl Level {
         let pieces = GridMap::like(&present.pieces);
         let progress = LevelProgress::new(&present);
         Self {
+            metadata,
             present,
             future,
             past: vec![],
@@ -62,20 +68,22 @@ impl Level {
             self.despawn(commands);
         }
 
-        let mut parent = commands.spawn(BoardBundle::default());
+        let mut parent = spawn_board(commands, &|_| ());
         self.parent = Some(parent.id());
         parent.with_children(|parent| {
             self.tiles.clear();
             for (coords, tile) in self.present.tiles.iter() {
-                self.tiles
-                    .set(coords, spawn_tile(parent, tile, coords, &assets.tiles));
+                self.tiles.set(
+                    coords,
+                    spawn_tile(parent, tile, coords, &assets.tiles, &|_| ()),
+                );
             }
 
             self.horz_borders.clear();
             for (coords, border) in self.present.horz_borders.iter() {
                 self.horz_borders.set(
                     coords,
-                    spawn_horz_border(parent, border, coords, &assets.borders),
+                    spawn_horz_border(parent, border, coords, &assets.borders, &|_| ()),
                 );
             }
 
@@ -83,7 +91,7 @@ impl Level {
             for (coords, border) in self.present.vert_borders.iter() {
                 self.vert_borders.set(
                     coords,
-                    spawn_vert_border(parent, border, coords, &assets.borders),
+                    spawn_vert_border(parent, border, coords, &assets.borders, &|_| ()),
                 );
             }
 
@@ -91,11 +99,16 @@ impl Level {
             for (coords, piece) in self.present.pieces.iter() {
                 let entity = match piece {
                     Piece::Particle(particle) => {
-                        spawn_particle(parent, particle, coords, &assets.particles)
+                        spawn_particle(parent, particle, coords, &assets.particles, &|_| ())
                     }
-                    Piece::Manipulator(manipulator) => {
-                        spawn_manipulator(parent, manipulator, coords, &self.present, &assets)
-                    }
+                    Piece::Manipulator(manipulator) => spawn_manipulator(
+                        parent,
+                        manipulator,
+                        coords,
+                        &self.present,
+                        &assets,
+                        &|_| (),
+                    ),
                 };
                 self.pieces.set(coords, entity);
             }
@@ -184,6 +197,13 @@ impl Level {
             self.remove_piece(coords, commands);
         }
     }
+}
+
+pub fn spawn_board<'c>(
+    commands: &'c mut Commands,
+    mutator: &impl Fn(&mut EntityCommands),
+) -> EntityCommands<'c> {
+    commands.spawn(BoardBundle::default()).mutate(mutator)
 }
 
 pub fn update_piece_coords(

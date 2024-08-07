@@ -3,8 +3,9 @@ use std::sync::Arc;
 use bevy::prelude::*;
 use bevy_egui::egui::FontFamily;
 use bevy_egui::{egui, EguiContexts};
+use classic_campaign::{clean_up_level_preview, init_level_preview};
 
-use crate::model::Board;
+use crate::model::{Board, LevelMetadata};
 
 use super::focus::get_focus;
 use super::{AssetsLoaded, GameAssets, GameState, InLevel};
@@ -29,7 +30,7 @@ pub struct GuiAssets {
 }
 
 #[derive(Event)]
-pub struct PlayLevel(pub Board);
+pub struct PlayLevel(pub Board, pub LevelMetadata);
 
 #[derive(Event)]
 pub enum UndoMoves {
@@ -114,6 +115,7 @@ impl Plugin for GuiPlugin {
             .init_asset_loader::<EguiFontAssetLoader>()
             .add_event::<PlayLevel>()
             .add_event::<UndoMoves>()
+            .add_systems(Startup, init_level_preview)
             .add_systems(Update, setup_gui_ctx.run_if(in_state(GameState::Init)))
             .add_systems(Update, main_menu_ui.run_if(in_state(GameState::MainMenu)))
             .add_systems(
@@ -121,6 +123,13 @@ impl Plugin for GuiPlugin {
                 classic_level_select_ui.run_if(in_state(GameState::ClassicLevelSelect)),
             )
             .add_systems(Update, get_focus.pipe(in_game_ui).run_if(in_state(InLevel)))
-            .add_systems(Update, game_over_ui.run_if(in_state(GameState::GameOver)));
+            .add_systems(Update, game_over_ui.run_if(in_state(GameState::GameOver)))
+            .add_systems(
+                OnExit(GameState::ClassicLevelSelect),
+                clean_up_level_preview,
+            );
     }
 }
+
+pub const WINDOW_WIDTH: u32 = 800;
+pub const WINDOW_HEIGHT: u32 = 600;

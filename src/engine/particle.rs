@@ -3,6 +3,7 @@ use std::sync::Arc;
 use bevy::asset::AssetServer;
 use bevy::ecs::bundle::Bundle;
 use bevy::ecs::entity::Entity;
+use bevy::ecs::system::EntityCommands;
 use bevy::hierarchy::ChildBuilder;
 use bevy::prelude::*;
 use enum_map::EnumMap;
@@ -12,7 +13,7 @@ use crate::model::{BoardCoords, Particle, Tint};
 
 use super::animation::{AnimatedSpriteBundle, AnimationBundle, FadeOutAnimator};
 use super::beam::HaloBundle;
-use super::{BoardCoordsHolder, EngineCoords, SpriteSheet};
+use super::{BoardCoordsHolder, EngineCoords, Mutable, SpriteSheet};
 
 pub struct ParticleAssets {
     sheets: EnumMap<Tint, ParticleSheets>,
@@ -92,6 +93,7 @@ pub fn spawn_particle(
     particle: &Particle,
     coords: BoardCoords,
     assets: &ParticleAssets,
+    mutator: &impl Fn(&mut EntityCommands),
 ) -> Entity {
     let mut anchor = parent.spawn(ParticleBundle::new(coords, particle, assets));
     anchor.with_children(|anchor| {
@@ -102,16 +104,20 @@ pub fn spawn_particle(
             },
             ..Default::default()
         };
-        anchor.spawn((
-            Corona,
-            BoardCoordsHolder(coords),
-            AnimatedSpriteBundle::with_defaults(&assets.sheets[particle.tint].corona, sprite),
-            FadeOutAnimator::default(),
-        ));
+        anchor
+            .spawn((
+                Corona,
+                BoardCoordsHolder(coords),
+                AnimatedSpriteBundle::with_defaults(&assets.sheets[particle.tint].corona, sprite),
+                FadeOutAnimator::default(),
+            ))
+            .mutate(mutator);
 
-        anchor.spawn(HaloBundle::new(coords, &assets.halo, REL_Z_LAYER_HALO));
+        anchor
+            .spawn(HaloBundle::new(coords, &assets.halo, REL_Z_LAYER_HALO))
+            .mutate(mutator);
     });
-    anchor.id()
+    anchor.mutate(mutator).id()
 }
 
 pub fn collect_particles(

@@ -6,6 +6,7 @@ use bevy::prelude::*;
 use bevy::window::{Window, WindowPlugin, WindowResolution};
 use bevy::DefaultPlugins;
 use bevy_egui::EguiPlugin;
+use engine::gui::{WINDOW_HEIGHT, WINDOW_WIDTH};
 
 mod engine;
 mod model;
@@ -17,19 +18,19 @@ use self::engine::beam::{BeamPlugin, BeamSet, MoveBeams, ResetBeams};
 use self::engine::focus::{get_focus, Focus, FocusPlugin, UpdateFocusEvent};
 use self::engine::gui::{GuiPlugin, PlayLevel, UndoMoves};
 use self::engine::input::{InputPlugin, InputSet, MoveManipulatorEvent, SelectManipulatorEvent};
-use self::engine::level::{update_piece_coords, Level};
+use self::engine::level::{update_piece_coords, Campaign, Level};
 use self::engine::particle::{collect_particles, ParticleCollected};
 use self::engine::{
-    AssetsLoaded, AssetsPlugin, GameAssets, GameState, GameplaySet, InLevel, InLevelSet,
+    AssetsLoaded, AssetsPlugin, GameAssets, GameState, GameplaySet, InLevel, InLevelSet, MainCamera,
 };
-use self::model::{Board, Piece, Tile, TileKind};
+use self::model::{Board, CampaignData, LevelCampaign, Piece, Tile, TileKind};
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "Particlz".into(),
-                resolution: WindowResolution::new(800.0, 600.0),
+                resolution: WindowResolution::new(WINDOW_WIDTH as _, WINDOW_HEIGHT as _),
                 ..Default::default()
             }),
             ..Default::default()
@@ -108,14 +109,17 @@ fn finish_init(
         return;
     }
 
+    let classic_campaign = LevelCampaign::from_static(CLASSIC_CAMPAIGN_DATA);
+    commands.insert_resource(Campaign(classic_campaign));
+
     let mut camera = Camera2dBundle::default();
     camera.projection.viewport_origin = Vec2::new(0.0, 1.0);
-    commands.spawn(camera);
+    commands.spawn((camera, MainCamera));
 
     if let Some(code) = std::env::args().nth(1) {
         match Board::from_pbc1(&code) {
             Ok(board) => {
-                ev_play.send(PlayLevel(board));
+                ev_play.send(PlayLevel(board, Default::default()));
                 return;
             }
             Err(err) => bevy::log::error!("Invalid custom level code: {}", err),
@@ -126,13 +130,20 @@ fn finish_init(
 
 fn start_level(
     mut ev_play: EventReader<PlayLevel>,
+    current_level: Option<ResMut<Level>>,
     mut commands: Commands,
     mut next_state: ResMut<NextState<GameState>>,
 ) {
-    let Some(level_event) = ev_play.read().last() else {
+    let Some(PlayLevel(board, metadata)) = ev_play.read().last() else {
         return;
     };
-    commands.insert_resource(Level::new(level_event.0.clone()));
+    let new_level = Level::new(board.clone(), metadata.clone());
+    if let Some(mut level) = current_level {
+        level.despawn(&mut commands);
+        *level = new_level;
+    } else {
+        commands.insert_resource(new_level);
+    }
     next_state.set(GameState::Playing);
 }
 
@@ -298,3 +309,33 @@ fn remove_level(mut level: ResMut<Level>, mut commands: Commands) {
     level.despawn(&mut commands);
     commands.remove_resource::<Level>();
 }
+
+const CLASSIC_CAMPAIGN_DATA: CampaignData = &[
+    ("eASY", &[
+        ("Tutorial", ":PBC1:AapHrUCxAhxBEASxUBAEBQoMEARhjihQoEBQoECBI5BCEARBACAFAEFQokCBhYIgCAoER6AAsVAQBEHRIAiwUBAEABBisUMQFC5QugBBYKEgKBKELAbB/wE="),
+        ("Experiment", ":PBC1:AaocQRMEUaBAgQIpgGFYngmCFACwLIIgBQAsiyBIAQDLIghSAMCyCIZJAQDLIggeoUEGAFgWQZACwINhgyAFoG0es0Hwfw=="),
+        ("Teamwork", ":PBC1:AXpciRIlCIIgDsABSAEAAAyQAgAAwKMUBEEQBAAWCoIgCAIACwVBEAQBgIWCIAiCgQD8Hw=="),
+        ("Roundabout", ":PBC1:AaocUYIgCIIgiBQAAABSGAAAgMFSIAAAQAo4RAAApAAKGAbAowSUAgAgBQAAgBQAoBSGwELBQAAA4P8="),
+        ("Relay", ":PBC1:AZrcYShQoECBAgUKFEgBAAAgBQAAgBQAAACWIhiCIRiCGSDFEAzBEAyBFAAAAFIAAABYKAiCIAiCgfB/"),
+        ("Occlusion", ":PBC1:AVoHrMABKHEAChcoUKDAUggxQNEgCIKlgiAIiwZBMMxSCDFA0SAIggcoGCAcoGgQBMH/AQ=="),
+        ("Transfer", ":PBC1:AZlA4QIFChRgAWCKDhbwgIJszFjChCi+UBEWAVA8WGgoQ4MwUBzTYKGARQAUDRbicwgApmgGKH5QirBgAMWDICjCAh8="),
+    ]),
+    ("MedIUM", &[
+        ("Mmmm, pi!", ":PBC1:AaocQRAEQRAEkQIAAEBqsCAPgjwYDCkgAAIAKRUCIIAGKWAAYAAAKWAQYBAAKSAFUgApAAAApAAAAPB/"),
+        ("Milky Way", ":PBC1:AaqHrEQBgiAIgjgCKSAAAOQpAAEABCkACIAAKSAYZiAEQAoBBhsqAJAKgAAAsBAABACwFwAgAPAAAQAQpIP8Hw=="),
+        ("Maze", ":PBC1:AartChQoUKBAgQIFeixUpEiRIkGRIkWCBYsUPeJBkSJFihRZKAiKBEWKFClSdMGuRYoULVKkSBAsGBQJijQpUiQoulCRIkWKFi8SFQkWLFJkgCA4JEWKxMkiRZgiRZgiRZiFgoGCIAiCIPg/"),
+        ("Checkers", ":PBC1:AXdHjShAFCAOQCpAjsHwCCFAgCCVIkCAhTAIYgSpAAMhwEIIEGCYfw=="),
+        ("Crowded", ":PBC1:AaocQTRo0KAF0eMBpBZLEmRZliUbJQAyAMlGWZhlGYBkowxIgiRJko0yIMmyLMNGGZAAyPApZUCSJFmGjTbJsiwLM+ADSpIkSZJtsk3+Dw=="),
+        ("Juggle", ":PBC1:Aaq3rUCBAgUKFChQoEQqAAAgQCoAACBAKmAYhmGYAKkAgwDAMAM8QkMBGAQIkAoAAAiQChiGYRgmQCoAACDAXkEQBEEQBCv9Hw=="),
+        ("I Kill You", ":PBC1:AaocQRAEQRDH4CikAADAYR1mIRYAAAYLsQAAACkAAACkUKTOASxShAK2KxIMUigIAo5AHKIgKBQMkFMAolVQaIiAAwAEQfTiAAAB"),
+    ]),
+    ("HArd", &[
+        ("Lock", ":PBC1:AXqcBRYQhAUEQRApQAJIAGwFQABAM0wqz3PkOYAUgAAIgFQABAgCIDXkQEMOO9BwwwD/Bw=="),
+        ("Delicate", ":PBC1:AZnFihUoUKBwgQLFFhq0AM/UKTxgsFhQiAWKFiqwEM8MgQGYPkUXZAEAKLpQWwyCIYDiCxUpyALFCwaLDRnUBYoOV2ChQgWKFC9SICj0Pw=="),
+        ("Void", ":PBC1:AaqHjaAJgiAIwoMUwAIAkALAAgCTAgAgYJACAIABUgAOQDkASIEBQQBAigHABgCSAQCwALoEAAAL0f8B"),
+        ("Nautilus", ":PBC1:AapnrQBBEARBEAYsJAAABKMhhbECAIIAKQQCBKMBSAEAAgApAIAgAFJAIEAwDpACRgoACIJUIAAABOOkRgoAAMD/AQ=="),
+        ("Trapped", ":PBC1:AanlCIIoQBBEgYUABAAGepQAQQggWAgUOyxoKlgIFBuApYKFcIDYAAeUChYCxQZgqWAhUGwAlgoeJhAIBcAwCwEIAIT/Aw=="),
+        ("Quadruped", ":PBC1:AaqHjiAIgiAIgkgBAIABkQIQAABSAADQBJEaEgDADoAUgOEQHlAUXQgAAARIASGAAOxSAAAwTPAABQACAPg/"),
+        ("Rails", ":PBC1:AaoccRgIgiAIgkgBAAAgBQAAMEwKAAAAKRxwpg9ThgUeJTBHFAGKsEihOAZBgDZsCswRRYCARwoHHDFCHkiBYRiGwUHB/wE="),
+    ]),
+];

@@ -3,6 +3,7 @@ use std::sync::Arc;
 use bevy::asset::{AssetServer, Handle};
 use bevy::ecs::bundle::Bundle;
 use bevy::ecs::entity::Entity;
+use bevy::ecs::system::EntityCommands;
 use bevy::hierarchy::{BuildChildren, ChildBuilder};
 use bevy::prelude::*;
 use bevy::render::texture::Image;
@@ -15,7 +16,7 @@ use crate::model::{Board, BoardCoords, Emitters, Manipulator};
 
 use super::animation::{AnimatedSpriteBundle, AnimationBundle, FadeOutAnimator};
 use super::beam::{spawn_beams, HaloBundle};
-use super::{BoardCoordsHolder, EngineCoords, GameAssets, SpriteSheet};
+use super::{BoardCoordsHolder, EngineCoords, GameAssets, Mutable, SpriteSheet};
 
 pub struct ManipulatorAssets {
     textures: EnumMap<Emitters, Handle<Image>>,
@@ -97,6 +98,7 @@ pub fn spawn_manipulator(
     coords: BoardCoords,
     board: &Board,
     assets: &GameAssets,
+    mutator: &impl Fn(&mut EntityCommands),
 ) -> Entity {
     let mut anchor = parent.spawn(ManipulatorBundle::new(
         coords,
@@ -104,21 +106,32 @@ pub fn spawn_manipulator(
         &assets.manipulators,
     ));
     anchor.with_children(|anchor| {
-        anchor.spawn((
-            BoardCoordsHolder(coords),
-            AnimatedSpriteBundle::new(&assets.manipulators.core),
-            FadeOutAnimator::default(),
-        ));
+        anchor
+            .spawn((
+                BoardCoordsHolder(coords),
+                AnimatedSpriteBundle::new(&assets.manipulators.core),
+                FadeOutAnimator::default(),
+            ))
+            .mutate(mutator);
 
-        anchor.spawn(HaloBundle::new(
+        anchor
+            .spawn(HaloBundle::new(
+                coords,
+                &assets.manipulators.halos[manipulator.emitters],
+                REL_Z_LAYER_HALO,
+            ))
+            .mutate(mutator);
+
+        spawn_beams(
+            anchor,
             coords,
-            &assets.manipulators.halos[manipulator.emitters],
-            REL_Z_LAYER_HALO,
-        ));
-
-        spawn_beams(anchor, coords, manipulator.emitters, board, &assets.beams);
+            manipulator.emitters,
+            board,
+            &assets.beams,
+            mutator,
+        );
     });
-    anchor.id()
+    anchor.mutate(mutator).id()
 }
 
 pub fn is_offset_inside_manipulator(offset: Vec2) -> bool {

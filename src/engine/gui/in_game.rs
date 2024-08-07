@@ -30,6 +30,10 @@ pub(super) fn in_game_ui(
         .frame(egui::Frame::none().inner_margin(10.0))
         .show(egui_ctx.ctx_mut(), |ui| {
             ui.vertical_centered(|ui| {
+                if let Some(name) = level.metadata.name.as_ref() {
+                    ui.label(name);
+                    ui.add_space(20.0);
+                }
                 if ui
                     .add_enabled(undo_enabled, egui::Button::new("UndO"))
                     .clicked()

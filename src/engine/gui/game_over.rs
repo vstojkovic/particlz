@@ -2,14 +2,18 @@ use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
 
 use crate::engine::gui::UndoMoves;
-use crate::engine::level::Level;
+use crate::engine::level::{Campaign, Level};
 use crate::engine::GameState;
 use crate::model::LevelOutcome;
+
+use super::PlayLevel;
 
 pub(super) fn game_over_ui(
     mut egui_ctx: EguiContexts,
     level: Res<Level>,
+    campaign: Res<Campaign>,
     mut ev_undo: EventWriter<UndoMoves>,
+    mut ev_play: EventWriter<PlayLevel>,
     mut next_state: ResMut<NextState<GameState>>,
 ) {
     fn add_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
@@ -46,7 +50,13 @@ pub(super) fn game_over_ui(
                 ui.label(message);
                 ui.columns(3, |ui| {
                     if let LevelOutcome::Victory = outcome {
-                        add_button(&mut ui[0], "nexT");
+                        if let Some(next) = level.metadata.next {
+                            if add_button(&mut ui[0], "nexT").clicked() {
+                                let board = campaign.levels[next].board.clone();
+                                let metadata = campaign.metadata(next);
+                                ev_play.send(PlayLevel(board, metadata));
+                            }
+                        }
                     } else {
                         if add_button(&mut ui[0], "UndO").clicked() {
                             ev_undo.send(UndoMoves::Last);

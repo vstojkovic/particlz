@@ -19,7 +19,7 @@ pub use element::{
     BeamTarget, BeamTargetKind, Border, Emitters, Manipulator, Particle, Piece, Tile, TileKind,
 };
 pub use grid::{GridMap, GridSet};
-pub use level::{LevelOutcome, LevelProgress};
+pub use level::{CampaignData, LevelCampaign, LevelMetadata, LevelOutcome, LevelProgress};
 
 pub const MAX_BOARD_ROWS: usize = 15;
 pub const MAX_BOARD_COLS: usize = 15;

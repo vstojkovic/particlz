@@ -4,6 +4,7 @@ use std::sync::Arc;
 use bevy::asset::{AssetServer, Handle};
 use bevy::ecs::bundle::Bundle;
 use bevy::ecs::entity::Entity;
+use bevy::ecs::system::EntityCommands;
 use bevy::hierarchy::ChildBuilder;
 use bevy::math::{Quat, Vec2};
 use bevy::render::texture::Image;
@@ -13,7 +14,7 @@ use strum::IntoEnumIterator;
 
 use crate::model::{BoardCoords, Border, Orientation};
 
-use super::{BoardCoordsHolder, EngineCoords};
+use super::{BoardCoordsHolder, EngineCoords, Mutable};
 
 pub struct BorderAssets {
     textures: HashMap<Border, Handle<Image>>,
@@ -84,6 +85,7 @@ pub fn spawn_horz_border(
     border: &Border,
     coords: BoardCoords,
     assets: &BorderAssets,
+    mutator: &impl Fn(&mut EntityCommands),
 ) -> Entity {
     parent
         .spawn(BorderBundle::new(
@@ -92,6 +94,7 @@ pub fn spawn_horz_border(
             Orientation::Horizontal,
             assets,
         ))
+        .mutate(mutator)
         .id()
 }
 
@@ -100,6 +103,7 @@ pub fn spawn_vert_border(
     border: &Border,
     coords: BoardCoords,
     assets: &BorderAssets,
+    mutator: &impl Fn(&mut EntityCommands),
 ) -> Entity {
     parent
         .spawn(BorderBundle::new(
@@ -108,6 +112,7 @@ pub fn spawn_vert_border(
             Orientation::Vertical,
             assets,
         ))
+        .mutate(mutator)
         .id()
 }
 

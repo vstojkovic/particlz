@@ -7,7 +7,7 @@ use bevy::ecs::bundle::Bundle;
 use bevy::ecs::component::Component;
 use bevy::ecs::event::{Event, EventReader};
 use bevy::ecs::schedule::{IntoSystemConfigs, SystemSet};
-use bevy::ecs::system::{Query, Res};
+use bevy::ecs::system::{EntityCommands, Query, Res};
 use bevy::hierarchy::{ChildBuilder, Children};
 use bevy::math::Vec2;
 use bevy::prelude::*;
@@ -27,7 +27,9 @@ use crate::model::{
 use super::animation::{AnimatedSpriteBundle, FadeOutAnimator};
 use super::border::{BORDER_OFFSET_X, BORDER_OFFSET_Y};
 use super::level::Level;
-use super::{BoardCoordsHolder, GameplaySet, SpriteSheet, MOVE_DURATION, TILE_HEIGHT, TILE_WIDTH};
+use super::{
+    BoardCoordsHolder, GameplaySet, Mutable, SpriteSheet, MOVE_DURATION, TILE_HEIGHT, TILE_WIDTH,
+};
 
 pub struct BeamPlugin;
 
@@ -206,9 +208,26 @@ pub fn spawn_beams(
     emitters: Emitters,
     board: &Board,
     assets: &BeamAssets,
+    mutator: &impl Fn(&mut EntityCommands),
 ) {
-    spawn_beam_group(anchor, origin, emitters, board, BeamGroup::Future, assets);
-    spawn_beam_group(anchor, origin, emitters, board, BeamGroup::Present, assets);
+    spawn_beam_group(
+        anchor,
+        origin,
+        emitters,
+        board,
+        BeamGroup::Future,
+        assets,
+        mutator,
+    );
+    spawn_beam_group(
+        anchor,
+        origin,
+        emitters,
+        board,
+        BeamGroup::Present,
+        assets,
+        mutator,
+    );
 }
 
 fn spawn_beam_group(
@@ -218,11 +237,14 @@ fn spawn_beam_group(
     board: &Board,
     group: BeamGroup,
     assets: &BeamAssets,
+    mutator: &impl Fn(&mut EntityCommands),
 ) {
     let manipulator = board.pieces.get(origin).unwrap().as_manipulator().unwrap();
     for direction in emitters.directions() {
         let target = manipulator.target(direction).unwrap();
-        anchor.spawn(BeamBundle::new(origin, direction, target, group, assets));
+        anchor
+            .spawn(BeamBundle::new(origin, direction, target, group, assets))
+            .mutate(mutator);
     }
 }
 

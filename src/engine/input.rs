@@ -16,7 +16,7 @@ use crate::model::{BoardCoords, Direction, Piece};
 use super::focus::{focus_direction_for_offset, get_focus, Focus};
 use super::level::Level;
 use super::manipulator::is_offset_inside_manipulator;
-use super::GameplaySet;
+use super::{GameplaySet, MainCamera};
 
 pub struct InputPlugin;
 
@@ -87,7 +87,7 @@ fn process_mouse_input(
     mut mouse_events: EventReader<MouseButtonInput>,
     mut mouse_input: Local<ButtonInput<MouseButton>>,
     window: Query<&Window, With<PrimaryWindow>>,
-    camera: Query<(&Camera, &GlobalTransform)>,
+    camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
     level: Res<Level>,
     q_xform: Query<&Transform>,
     mut ev_select_manipulator: EventWriter<SelectManipulatorEvent>,
