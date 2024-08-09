@@ -63,7 +63,7 @@ fn main() {
         .configure_sets(FixedPostUpdate, InLevelSet.run_if(in_state(InLevel)))
         .add_systems(Update, finish_init.run_if(in_state(GameState::Init)))
         .add_systems(
-            Update,
+            PostUpdate,
             start_level.run_if(not(in_state(GameState::Playing))),
         )
         .add_systems(OnEnter(GameState::Playing), setup_board)
