@@ -48,26 +48,31 @@ pub(super) fn game_over_ui(
                 };
                 let message = egui::RichText::new(message).text_style(egui::TextStyle::Small);
                 ui.label(message);
-                ui.columns(3, |ui| {
+                let columns = match outcome {
+                    LevelOutcome::Victory if level.metadata.next.is_none() => 2,
+                    _ => 3,
+                };
+                ui.columns(columns, |ui| {
+                    let mut col_iter = 0..columns;
                     if let LevelOutcome::Victory = outcome {
                         if let Some(next) = level.metadata.next {
-                            if add_button(&mut ui[0], "nexT").clicked() {
+                            if add_button(&mut ui[col_iter.next().unwrap()], "nexT").clicked() {
                                 let board = campaign.levels[next].board.clone();
                                 let metadata = campaign.metadata(next);
                                 ev_play.send(PlayLevel(board, metadata));
                             }
                         }
                     } else {
-                        if add_button(&mut ui[0], "UndO").clicked() {
+                        if add_button(&mut ui[col_iter.next().unwrap()], "UndO").clicked() {
                             ev_undo.send(UndoMoves::Last);
                             next_state.set(GameState::Playing);
                         }
                     }
-                    if add_button(&mut ui[1], "repLAy").clicked() {
+                    if add_button(&mut ui[col_iter.next().unwrap()], "repLAy").clicked() {
                         ev_undo.send(UndoMoves::All);
                         next_state.set(GameState::Playing);
                     }
-                    if add_button(&mut ui[2], "MenU").clicked() {
+                    if add_button(&mut ui[col_iter.next().unwrap()], "MenU").clicked() {
                         next_state.set(GameState::MainMenu);
                     }
                 });
