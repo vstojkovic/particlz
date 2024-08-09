@@ -27,6 +27,7 @@ pub(super) fn in_game_ui(
         };
     egui::SidePanel::right("in_game_ui")
         .resizable(false)
+        .exact_width(IN_GAME_PANEL_WIDTH as _)
         .frame(egui::Frame::none().inner_margin(10.0))
         .show(egui_ctx.ctx_mut(), |ui| {
             ui.vertical_centered(|ui| {
@@ -52,3 +53,5 @@ pub(super) fn in_game_ui(
             });
         });
 }
+
+pub const IN_GAME_PANEL_WIDTH: u32 = 200;

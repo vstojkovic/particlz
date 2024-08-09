@@ -32,7 +32,7 @@ use self::tile::TileAssets;
 
 const TILE_WIDTH: f32 = 45.0;
 const TILE_HEIGHT: f32 = 45.0;
-const COORDS_ORIGIN_OFFSET: Vec2 = Vec2 { x: 45.0, y: -45.0 };
+const COORDS_ORIGIN_OFFSET: Vec2 = Vec2 { x: 22.5, y: -22.5 };
 const MOVE_DURATION: Duration = Duration::from_millis(500);
 
 #[derive(States, Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]

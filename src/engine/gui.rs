@@ -133,3 +133,4 @@ impl Plugin for GuiPlugin {
 
 pub const WINDOW_WIDTH: u32 = 800;
 pub const WINDOW_HEIGHT: u32 = 600;
+pub use in_game::IN_GAME_PANEL_WIDTH;

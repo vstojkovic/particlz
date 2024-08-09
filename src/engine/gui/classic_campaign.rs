@@ -170,7 +170,7 @@ fn spawn_preview(board: &Board, assets: &GameAssets, commands: &mut Commands) ->
         cmds.insert(layer.clone());
     };
 
-    let mut parent = spawn_board(commands, &mutator);
+    let mut parent = spawn_board(board, PREVIEW_AREA_SIZE, commands, &mutator);
     parent.insert(layer.clone());
 
     parent.with_children(|parent| {
@@ -201,5 +201,9 @@ fn spawn_preview(board: &Board, assets: &GameAssets, commands: &mut Commands) ->
 const PREVIEW_WIDTH: u32 = 240;
 const PREVIEW_HEIGHT: u32 = 240;
 const PREVIEW_SCALE_FACTOR: f32 = 2.0625;
+const PREVIEW_AREA_SIZE: Vec2 = Vec2::new(
+    PREVIEW_WIDTH as f32 * PREVIEW_SCALE_FACTOR,
+    PREVIEW_HEIGHT as f32 * PREVIEW_SCALE_FACTOR,
+);
 const PREVIEW_PANEL_WIDTH: u32 = 300;
 const SELECTION_PANEL_WIDTH: u32 = WINDOW_WIDTH - PREVIEW_PANEL_WIDTH;

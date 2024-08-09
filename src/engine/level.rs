@@ -16,7 +16,7 @@ use super::focus::spawn_focus;
 use super::manipulator::spawn_manipulator;
 use super::particle::spawn_particle;
 use super::tile::spawn_tile;
-use super::{BoardCoordsHolder, EngineCoords, GameAssets, Mutable};
+use super::{BoardCoordsHolder, EngineCoords, GameAssets, Mutable, TILE_HEIGHT, TILE_WIDTH};
 
 #[derive(Resource)]
 pub struct Level {
@@ -63,12 +63,12 @@ impl Level {
         }
     }
 
-    pub fn spawn(&mut self, commands: &mut Commands, assets: &GameAssets) {
+    pub fn spawn(&mut self, play_area_size: Vec2, commands: &mut Commands, assets: &GameAssets) {
         if self.parent.is_some() {
             self.despawn(commands);
         }
 
-        let mut parent = spawn_board(commands, &|_| ());
+        let mut parent = spawn_board(&self.present, play_area_size, commands, &|_| ());
         self.parent = Some(parent.id());
         parent.with_children(|parent| {
             self.tiles.clear();
@@ -200,10 +200,30 @@ impl Level {
 }
 
 pub fn spawn_board<'c>(
+    board: &Board,
+    parent_area_size: Vec2,
     commands: &'c mut Commands,
     mutator: &impl Fn(&mut EntityCommands),
 ) -> EntityCommands<'c> {
-    commands.spawn(BoardBundle::default()).mutate(mutator)
+    let board_size = Vec2::new(
+        board.dims.cols as f32 * TILE_WIDTH,
+        board.dims.rows as f32 * TILE_HEIGHT,
+    )
+    .abs();
+    let mut board_origin = (parent_area_size - board_size) / 2.0;
+    board_origin.y = -board_origin.y;
+
+    commands
+        .spawn(BoardBundle {
+            spatial: SpatialBundle {
+                transform: Transform {
+                    translation: board_origin.extend(0.0),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        })
+        .mutate(mutator)
 }
 
 pub fn update_piece_coords(

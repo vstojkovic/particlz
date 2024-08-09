@@ -6,7 +6,6 @@ use bevy::prelude::*;
 use bevy::window::{Window, WindowPlugin, WindowResolution};
 use bevy::DefaultPlugins;
 use bevy_egui::EguiPlugin;
-use engine::gui::{WINDOW_HEIGHT, WINDOW_WIDTH};
 
 mod engine;
 mod model;
@@ -16,7 +15,9 @@ use self::engine::animation::{
 };
 use self::engine::beam::{BeamPlugin, BeamSet, MoveBeams, ResetBeams};
 use self::engine::focus::{get_focus, Focus, FocusPlugin, UpdateFocusEvent};
-use self::engine::gui::{GuiPlugin, PlayLevel, UndoMoves};
+use self::engine::gui::{
+    GuiPlugin, PlayLevel, UndoMoves, IN_GAME_PANEL_WIDTH, WINDOW_HEIGHT, WINDOW_WIDTH,
+};
 use self::engine::input::{InputPlugin, InputSet, MoveManipulatorEvent, SelectManipulatorEvent};
 use self::engine::level::{update_piece_coords, Campaign, Level};
 use self::engine::particle::{collect_particles, ParticleCollected};
@@ -153,7 +154,7 @@ fn setup_board(
     assets: Res<GameAssets>,
     mut ev_retarget: EventWriter<ResetBeams>,
 ) {
-    level.spawn(&mut commands, &assets);
+    level.spawn(PLAY_AREA_SIZE, &mut commands, &assets);
     ev_retarget.send(ResetBeams);
 }
 
@@ -301,7 +302,7 @@ fn undo_moves(
             UndoMoves::All => level.reset(),
         }
     }
-    level.spawn(&mut commands, &assets);
+    level.spawn(PLAY_AREA_SIZE, &mut commands, &assets);
     ev_retarget.send(ResetBeams);
 }
 
@@ -309,6 +310,11 @@ fn remove_level(mut level: ResMut<Level>, mut commands: Commands) {
     level.despawn(&mut commands);
     commands.remove_resource::<Level>();
 }
+
+const PLAY_AREA_SIZE: Vec2 = Vec2::new(
+    (WINDOW_WIDTH - IN_GAME_PANEL_WIDTH) as f32,
+    WINDOW_HEIGHT as f32,
+);
 
 const CLASSIC_CAMPAIGN_DATA: CampaignData = &[
     ("eASY", &[
