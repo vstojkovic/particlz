@@ -65,6 +65,13 @@ impl Focus {
             _ => None,
         }
     }
+
+    pub fn is_selected(&self) -> bool {
+        match self {
+            Focus::Selected(_, _) => true,
+            _ => false,
+        }
+    }
 }
 
 impl FocusAssets {

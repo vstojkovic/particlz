@@ -3,6 +3,7 @@
 use std::sync::{Arc, Once, Weak};
 use std::time::Duration;
 
+use audio::AudioAssets;
 use bevy::asset::AssetServer;
 use bevy::ecs::component::Component;
 use bevy::ecs::system::{EntityCommands, Resource};
@@ -10,6 +11,7 @@ use bevy::math::Vec2;
 use bevy::prelude::*;
 
 pub mod animation;
+pub mod audio;
 pub mod beam;
 pub mod border;
 pub mod focus;
@@ -78,6 +80,7 @@ pub struct GameAssets {
     load_barrier: Weak<()>,
     event_trigger: Once,
     gui: GuiAssets,
+    audio: AudioAssets,
     tiles: TileAssets,
     borders: BorderAssets,
     particles: ParticleAssets,
@@ -96,6 +99,7 @@ impl GameAssets {
             load_barrier: Arc::downgrade(&load_barrier),
             event_trigger: Once::new(),
             gui: GuiAssets::load(server, &load_barrier),
+            audio: AudioAssets::load(server, &load_barrier),
             tiles: TileAssets::load(server, &load_barrier),
             borders: BorderAssets::load(server, &load_barrier),
             particles: ParticleAssets::load(server, &load_barrier),

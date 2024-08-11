@@ -6,6 +6,8 @@ use bevy::prelude::*;
 use bevy::window::{Window, WindowPlugin, WindowResolution};
 use bevy::DefaultPlugins;
 use bevy_egui::EguiPlugin;
+use engine::audio::{AudioPlugin, PlaySfx};
+use model::LevelOutcome;
 
 mod engine;
 mod model;
@@ -40,6 +42,7 @@ fn main() {
         .add_computed_state::<InLevel>()
         .add_plugins(EguiPlugin)
         .add_plugins(GuiPlugin)
+        .add_plugins(AudioPlugin)
         .add_plugins(AssetsPlugin)
         .add_plugins(InputPlugin)
         .add_plugins(AnimationPlugin)
@@ -162,6 +165,7 @@ fn select_manipulator(
     focus: In<Focus>,
     mut ev_select_manipulator: EventReader<SelectManipulatorEvent>,
     mut ev_update_focus: EventWriter<UpdateFocusEvent>,
+    mut ev_play_sfx: EventWriter<PlaySfx>,
     level: Res<Level>,
 ) {
     let Some(event) = ev_select_manipulator.read().last() else {
@@ -177,6 +181,9 @@ fn select_manipulator(
     let new_focus = coords
         .map(|coords| Focus::Selected(coords, level.present.compute_allowed_moves(coords)))
         .unwrap_or(Focus::None);
+    if new_focus.is_selected() {
+        ev_play_sfx.send(PlaySfx::Focus);
+    }
     ev_update_focus.send(UpdateFocusEvent(new_focus));
 }
 
@@ -219,6 +226,7 @@ fn finish_animation(
     mut ev_retarget: EventWriter<ResetBeams>,
     mut ev_update_focus: EventWriter<UpdateFocusEvent>,
     mut ev_collected: EventWriter<ParticleCollected>,
+    mut ev_play_sfx: EventWriter<PlaySfx>,
     mut level: ResMut<Level>,
     mut commands: Commands,
 ) {
@@ -239,6 +247,7 @@ fn finish_animation(
                         ..
                     }) = level.present.tiles.get(to_coords)
                     {
+                        ev_play_sfx.send(PlaySfx::Collect);
                         ev_collected.send(ParticleCollected(
                             level.pieces.get(to_coords).copied().unwrap(),
                         ));
@@ -258,6 +267,7 @@ fn finish_animation(
                     level.present.compute_allowed_moves(focus_coords),
                 )));
             } else {
+                ev_play_sfx.send(PlaySfx::Fade);
                 ev_update_focus.send(UpdateFocusEvent(Focus::Busy(Some(focus_coords))));
                 ev_start_animation.send(StartAnimation(Animation::FadeOut, unsupported));
             }
@@ -280,8 +290,17 @@ fn finish_animation(
     ev_retarget.send(ResetBeams);
 }
 
-fn check_game_over(level: Res<Level>, mut next_state: ResMut<NextState<GameState>>) {
-    if level.progress.outcome.is_some() {
+fn check_game_over(
+    level: Res<Level>,
+    mut next_state: ResMut<NextState<GameState>>,
+    mut ev_play_sfx: EventWriter<PlaySfx>,
+) {
+    if let Some(outcome) = level.progress.outcome {
+        let effect = match outcome {
+            LevelOutcome::Victory => PlaySfx::Win,
+            _ => PlaySfx::Lose,
+        };
+        ev_play_sfx.send(effect);
         next_state.set(GameState::GameOver);
     }
 }
