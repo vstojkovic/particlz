@@ -16,6 +16,7 @@ pub enum LevelOutcome {
 
 #[derive(Debug, Default, Clone)]
 pub struct LevelMetadata {
+    pub id: Option<usize>,
     pub name: Option<String>,
     pub next: Option<usize>,
 }
@@ -111,6 +112,7 @@ impl LevelCampaign {
     pub fn metadata(&self, level_idx: usize) -> LevelMetadata {
         let next_idx = level_idx + 1;
         LevelMetadata {
+            id: Some(level_idx),
             name: Some(self.levels[level_idx].name.clone()),
             next: (next_idx < self.levels.len()).then_some(next_idx),
         }

@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use bevy::window::{Window, WindowPlugin, WindowResolution};
 use bevy::DefaultPlugins;
 use bevy_egui::EguiPlugin;
-use engine::audio::{AudioPlugin, PlaySfx};
+use engine::audio::{AudioPlugin, PlaySfx, PlayTune};
 use model::LevelOutcome;
 
 mod engine;
@@ -65,6 +65,7 @@ fn main() {
         .configure_sets(FixedUpdate, InLevelSet.run_if(in_state(InLevel)))
         .configure_sets(FixedPostUpdate, InLevelSet.run_if(in_state(InLevel)))
         .add_systems(Update, finish_init.run_if(in_state(GameState::Init)))
+        .add_systems(OnEnter(GameState::MainMenu), play_menu_tune)
         .add_systems(
             PostUpdate,
             start_level.run_if(not(in_state(GameState::Playing))),
@@ -132,15 +133,21 @@ fn finish_init(
     next_state.set(GameState::MainMenu);
 }
 
+fn play_menu_tune(mut ev_play_tune: EventWriter<PlayTune>) {
+    ev_play_tune.send(PlayTune::Menu);
+}
+
 fn start_level(
     mut ev_play: EventReader<PlayLevel>,
     current_level: Option<ResMut<Level>>,
     mut commands: Commands,
+    mut ev_play_tune: EventWriter<PlayTune>,
     mut next_state: ResMut<NextState<GameState>>,
 ) {
     let Some(PlayLevel(board, metadata)) = ev_play.read().last() else {
         return;
     };
+
     let new_level = Level::new(board.clone(), metadata.clone());
     if let Some(mut level) = current_level {
         level.despawn(&mut commands);
@@ -148,6 +155,13 @@ fn start_level(
     } else {
         commands.insert_resource(new_level);
     }
+
+    let tune = metadata
+        .id
+        .map(|idx| CLASSIC_CAMPAIGN_TUNES[idx])
+        .unwrap_or(PlayTune::Easy);
+    ev_play_tune.send(tune);
+
     next_state.set(GameState::Playing);
 }
 
@@ -363,4 +377,28 @@ const CLASSIC_CAMPAIGN_DATA: CampaignData = &[
         ("Quadruped", ":PBC1:AaqHjiAIgiAIgkgBAIABkQIQAABSAADQBJEaEgDADoAUgOEQHlAUXQgAAARIASGAAOxSAAAwTPAABQACAPg/"),
         ("Rails", ":PBC1:AaoccRgIgiAIgkgBAAAgBQAAMEwKAAAAKRxwpg9ThgUeJTBHFAGKsEihOAZBgDZsCswRRYCARwoHHDFCHkiBYRiGwUHB/wE="),
     ]),
+];
+
+const CLASSIC_CAMPAIGN_TUNES: &[PlayTune] = &[
+    PlayTune::Easy,
+    PlayTune::Easy,
+    PlayTune::Easy,
+    PlayTune::Easy,
+    PlayTune::Easy,
+    PlayTune::Easy,
+    PlayTune::Easy,
+    PlayTune::Medium,
+    PlayTune::Medium,
+    PlayTune::Medium,
+    PlayTune::Medium,
+    PlayTune::Medium,
+    PlayTune::Medium,
+    PlayTune::Medium,
+    PlayTune::Hard,
+    PlayTune::Hard,
+    PlayTune::Hard,
+    PlayTune::Hard,
+    PlayTune::Hard,
+    PlayTune::Hard,
+    PlayTune::Hard,
 ];
